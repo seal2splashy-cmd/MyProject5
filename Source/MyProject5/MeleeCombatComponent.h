@@ -1,17 +1,12 @@
 // MeleeCombatComponent.h
-// Drop-in glue between your pawn and AMeleeWeapon.
+// Glue between AMyFPSPawn and AMeleeWeapon.
 //
-// Add this component to AMyFPSPawn and it will:
-//   - spawn the melee weapon on BeginPlay and hook it to the pawn's camera
-//   - bind Guard (hold) and Thrust (press) to Enhanced Input actions
-//   - give you FilterLook(), which feeds the mouse into the blade and returns
-//     the (possibly reduced) delta your pawn should use to turn the camera
-//
-// Pawn changes needed (3 lines total):
-//   1. Header:          UPROPERTY(VisibleAnywhere) TObjectPtr<UMeleeCombatComponent> Melee;
-//   2. Constructor:     Melee = CreateDefaultSubobject<UMeleeCombatComponent>(TEXT("Melee"));
-//   3. SetupPlayerInputComponent:  Melee->BindInput(PlayerInputComponent);
-//   4. In your Look handler, before turning:  LookDelta = Melee->FilterLook(LookDelta);
+// - Spawns the melee weapon on BeginPlay (holstered/hidden unless bStartActive)
+// - FilterLook(): feed the raw look delta through this BEFORE turning the camera.
+//   While guarding it steals most of the mouse to steer the blade.
+// - StartGuard / StopGuard / DoThrust: call from your own input handlers
+//   (MyProject5 uses legacy BindKey input, so the pawn drives these directly).
+// - BindInput(): optional Enhanced Input route if you move to Input Actions later.
 
 #pragma once
 
@@ -33,14 +28,19 @@ class MYPROJECT5_API UMeleeCombatComponent : public UActorComponent
 public:
 	UMeleeCombatComponent();
 
-	/** Call from the pawn's SetupPlayerInputComponent. Safe to call before or after BeginPlay. */
+	/** Optional: bind GuardAction/ThrustAction through Enhanced Input. */
 	void BindInput(UInputComponent* PlayerInputComponent);
 
-	/**
-	 * Pass the raw mouse/stick look delta through this BEFORE you apply yaw/pitch.
-	 * It drives the blade while guarding and returns what's left for the camera.
-	 */
+	/** Pass the raw look delta through this before applying yaw/pitch. */
 	FVector2D FilterLook(const FVector2D& RawLookDelta);
+
+	void StartGuard();
+	void StopGuard();
+	void DoThrust();
+
+	/** Show/hide the weapon. Hidden = no sweeps, no damage, mouse untouched. */
+	void SetMeleeActive(bool bActive);
+	bool IsMeleeActive() const { return bMeleeActive; }
 
 	UFUNCTION(BlueprintPure, Category = "Melee")
 	AMeleeWeapon* GetWeapon() const { return Weapon; }
@@ -53,15 +53,16 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	/** Make a Blueprint child of AMeleeWeapon (give it a mesh, place BladeBase/BladeTip) and set it here. */
+	/** Defaults to the plain AMeleeWeapon (a pipe). Point it at a Blueprint child for real meshes. */
 	UPROPERTY(EditAnywhere, Category = "Melee")
 	TSubclassOf<AMeleeWeapon> WeaponClass;
 
-	/** Bool action, e.g. Right Mouse. Held = guard / steer the blade with the mouse. */
+	UPROPERTY(EditAnywhere, Category = "Melee")
+	bool bStartActive = false;
+
 	UPROPERTY(EditAnywhere, Category = "Melee|Input")
 	TObjectPtr<UInputAction> GuardAction;
 
-	/** Bool action, e.g. Left Mouse. Pressed = stab forward. */
 	UPROPERTY(EditAnywhere, Category = "Melee|Input")
 	TObjectPtr<UInputAction> ThrustAction;
 
@@ -74,6 +75,7 @@ private:
 	TObjectPtr<AMeleeWeapon> Weapon;
 
 	TWeakObjectPtr<UCameraComponent> Camera;
+	bool bMeleeActive = false;
 
 	UCameraComponent* FindOwnerCamera() const;
 	void SpawnWeapon(TSubclassOf<AMeleeWeapon> ClassToSpawn);

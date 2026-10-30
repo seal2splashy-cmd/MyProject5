@@ -1,0 +1,402 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "GameFramework/Pawn.h"
+#include "MyFPSPawn.generated.h"
+
+class UCapsuleComponent;
+class UCameraComponent;
+class USkeletalMeshComponent;
+class USkeletalMesh;
+class UAnimationAsset;
+class UMeleeCombatComponent;
+class AGun;
+
+UCLASS()
+class MYPROJECT5_API AMyFPSPawn : public APawn
+{
+    GENERATED_BODY()
+
+public:
+    AMyFPSPawn();
+
+    AGun* GetCurrentGun() const { return CurrentGun; }
+
+    // HUD accessors
+    float GetHealth() const     { return CurrentHealth; }
+    float GetMaxHealth() const  { return MaxHealth; }
+    float GetStamina() const    { return Stamina; }
+    float GetMaxStamina() const { return MaxStamina; }
+    bool  IsDead() const        { return bIsDead; }
+    float GetDeathTime() const  { return DeathTime; }
+    bool  IsMeleeEquipped() const;
+
+    virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent,
+        class AController* EventInstigator, AActor* DamageCauser) override;
+
+protected:
+    virtual void BeginPlay() override;
+
+public:
+    virtual void Tick(float DeltaTime) override;
+    virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
+
+private:
+    // Health / death
+    void OnDeath();
+    void Respawn();
+
+    UPROPERTY(EditAnywhere, Category = "Health")
+    float MaxHealth = 100.f;
+
+    UPROPERTY(VisibleInstanceOnly, Category = "Health")
+    float CurrentHealth = 100.f;
+
+    UPROPERTY(EditAnywhere, Category = "Health")
+    float RespawnDelay = 4.f;
+
+    bool  bIsDead = false;
+    float DeathTime = -1.f;
+    FTimerHandle TimerHandle_Respawn;
+
+    // First-person arms (child of the gun mesh so they inherit all sway/recoil/bob)
+    void SetupArms();
+    void UpdateArmsAnimation();
+
+    UPROPERTY(VisibleAnywhere, Category = "Arms")
+    USkeletalMeshComponent* ArmsMesh;
+
+    UPROPERTY(EditAnywhere, Category = "Arms")
+    TSoftObjectPtr<USkeletalMesh> ArmsMeshAsset;
+
+    UPROPERTY(EditAnywhere, Category = "Arms")
+    TSoftObjectPtr<UAnimationAsset> ArmsIdleAnim;
+
+    UPROPERTY(EditAnywhere, Category = "Arms")
+    TSoftObjectPtr<UAnimationAsset> ArmsWalkAnim;
+
+    /** Tweak in the editor until the hands sit on the grip. */
+    UPROPERTY(EditAnywhere, Category = "Arms")
+    FVector ArmsOffset = FVector::ZeroVector;
+
+    UPROPERTY(EditAnywhere, Category = "Arms")
+    FRotator ArmsRotation = FRotator::ZeroRotator;
+
+    UPROPERTY(EditAnywhere, Category = "Arms")
+    float ArmsScale = 1.f;
+
+    int32 ArmsAnimState = -1; // 0 idle, 1 walk
+
+    // Melee (key 2) / gun (key 1)
+    void EquipGun();
+    void EquipMelee();
+
+    UPROPERTY(VisibleAnywhere, Category = "Melee")
+    UMeleeCombatComponent* Melee;
+
+    uint64 LastFireFrame = 0;
+    void MoveForward(float Value);
+    void MoveRight(float Value);
+    void Turn(float Value);
+    void LookUp(float Value);
+
+    void StartJump();
+    void StopJump();
+    void StartRun();
+    void StopRun();
+    void ToggleCrouch();
+    void StartSlide();
+    void StopSlide();
+
+    void LeanLeftPressed();
+    void LeanLeftReleased();
+    void LeanRightPressed();
+    void LeanRightReleased();
+
+    void TiltLeftPressed();
+    void TiltLeftReleased();
+    void TiltRightPressed();
+    void TiltRightReleased();
+
+    void OnFirePressed();
+    void OnReloadPressed();
+    void OnAimPressed();
+    void OnAimReleased();
+
+    bool CanStandUp() const;
+    void UpdateGunSway(float DeltaTime);
+
+    // Components
+    UPROPERTY(VisibleAnywhere)
+    UCapsuleComponent* CapsuleComponent;
+
+    UPROPERTY(VisibleAnywhere)
+    UCameraComponent* CameraComponent;
+
+    FVector MovementInput;
+
+    // Movement
+    UPROPERTY(EditAnywhere, Category = "Movement")
+    float WalkSpeed = 900.f;
+
+    UPROPERTY(EditAnywhere, Category = "Movement")
+    float RunSpeed = 1800.f;
+
+    UPROPERTY(EditAnywhere, Category = "Movement")
+    float CrouchSpeed = 300.f;
+
+    UPROPERTY(EditAnywhere, Category = "Movement")
+    float SlideSpeedBoost = 1400.f;
+
+    float CurrentSpeed = 600.f;
+    float DesiredSpeed = 600.f;
+
+    UPROPERTY(EditAnywhere, Category = "Movement")
+    float SpeedInterp = 8.f;
+
+    // Gravity & Jump
+    FVector Velocity;
+
+    UPROPERTY(EditAnywhere, Category = "Jump")
+    float Gravity = -980.f;
+
+    UPROPERTY(EditAnywhere, Category = "Jump")
+    float TerminalVelocity = -4000.f;
+
+    UPROPERTY(EditAnywhere, Category = "Jump")
+    float JumpVelocity = 350.f;
+
+    bool bIsOnGround  = true;
+    bool bWasOnGround = true;
+    bool bIsJumping   = false;
+
+    // Crouch
+    bool bIsCrouching = false;
+
+    UPROPERTY(EditAnywhere, Category = "Crouch")
+    float StandingHalfHeight = 88.f;
+
+    UPROPERTY(EditAnywhere, Category = "Crouch")
+    float CrouchingHalfHeight = 44.f;
+
+    UPROPERTY(EditAnywhere, Category = "Crouch")
+    float CrouchInterpSpeed = 10.f;
+
+    UPROPERTY(EditAnywhere, Category = "Crouch")
+    float CameraLerpSpeed = 10.f;
+
+    float TargetCapsuleHalfHeight = 88.f;
+    float TargetCameraZ = 60.f;
+
+    // Slide
+    bool bIsSliding = false;
+
+    UPROPERTY(EditAnywhere, Category = "Slide")
+    float SlideDuration = 0.9f;
+
+    float SlideTimer = 0.f;
+
+    // Stamina
+    UPROPERTY(EditAnywhere, Category = "Stamina")
+    float MaxStamina = 100.f;
+
+    UPROPERTY(EditAnywhere, Category = "Stamina")
+    float SprintDrainRate = 22.f;
+
+    UPROPERTY(EditAnywhere, Category = "Stamina")
+    float SlideDrainRate = 40.f;
+
+    UPROPERTY(EditAnywhere, Category = "Stamina")
+    float JumpCost = 15.f;
+
+    UPROPERTY(EditAnywhere, Category = "Stamina")
+    float RegenRate = 20.f;
+
+    UPROPERTY(EditAnywhere, Category = "Stamina")
+    float RegenDelay = 0.7f;
+
+    UPROPERTY(EditAnywhere, Category = "Stamina")
+    float MinSprintStamina = 10.f;
+
+    UPROPERTY(EditAnywhere, Category = "Stamina")
+    float MinSlideStamina = 20.f;
+
+    float Stamina = 100.f;
+    float TimeSinceStaminaUse = 0.f;
+    bool  bOutOfStamina = false;
+    bool  bIsRunning    = false;
+
+    // Camera
+    FRotator SmoothedCameraRotation;
+
+    UPROPERTY(EditAnywhere, Category = "Camera")
+    float CameraSmoothingSpeed = 8.f;
+
+    float TargetRoll  = 0.f;
+    float CurrentRoll = 0.f;
+
+    UPROPERTY(EditAnywhere, Category = "Camera|Roll")
+    float TurnRollMax = 25.f;
+
+    UPROPERTY(EditAnywhere, Category = "Camera|Roll")
+    float StrafeRollMax = 15.f;
+
+    UPROPERTY(EditAnywhere, Category = "Camera|Roll")
+    float RollInterpSpeed = 6.f;
+
+    float CurrentTurnInput = 0.f;
+    float CurrentLookInput = 0.f;
+    float PreviousControlYaw = 0.f;
+
+    UPROPERTY(EditAnywhere, Category = "Camera|Roll")
+    float YawSpeedForFullTilt = 200.f;
+
+    // Headbob
+    UPROPERTY(EditAnywhere, Category = "Camera|Headbob")
+    bool bEnableHeadBob = true;
+
+    UPROPERTY(EditAnywhere, Category = "Camera|Headbob")
+    float HeadBobAmplitude = 2.f;
+
+    UPROPERTY(EditAnywhere, Category = "Camera|Headbob")
+    float HeadBobFrequency = 10.f;
+
+    float HeadBobTimer = 0.f;
+
+    // FOV
+    UPROPERTY(EditAnywhere, Category = "Camera|FOV")
+    float BaseFOV = 90.f;
+
+    UPROPERTY(EditAnywhere, Category = "Camera|FOV")
+    float SprintFOVAdd = 20.f;
+
+    UPROPERTY(EditAnywhere, Category = "Camera|FOV")
+    float SlideFOVAdd = 18.f;
+
+    UPROPERTY(EditAnywhere, Category = "Camera|FOV")
+    float FOVInterpSpeed = 6.f;
+
+    // Slide pitch tilt
+    float CurrentSlidePitch = 0.f;
+
+    UPROPERTY(EditAnywhere, Category = "Camera|Slide")
+    float SlideTiltPitch = -10.f;
+
+    UPROPERTY(EditAnywhere, Category = "Camera|Slide")
+    float SlideTiltInterpSpeed = 8.f;
+
+    // Camera shake
+    UPROPERTY(EditAnywhere, Category = "Camera|Shake")
+    bool bEnableCameraShake = true;
+
+    UPROPERTY(EditAnywhere, Category = "Camera|Shake")
+    float RunShakeAmplitudeDeg = 0.6f;
+
+    UPROPERTY(EditAnywhere, Category = "Camera|Shake")
+    float RunShakeFrequency = 12.f;
+
+    UPROPERTY(EditAnywhere, Category = "Camera|Shake")
+    float LandingShakeAmountDeg = 6.f;
+
+    UPROPERTY(EditAnywhere, Category = "Camera|Shake")
+    float ShakeDecaySpeed = 10.f;
+
+    UPROPERTY(EditAnywhere, Category = "Camera|Shake")
+    float PosJitterAmplitude = 0.6f;
+
+    float ShakeNoiseTime      = 0.f;
+    float LandingShakeImpulse = 0.f;
+
+    // Lean
+    bool  bLeanLeftHeld  = false;
+    bool  bLeanRightHeld = false;
+    float LeanTarget = 0.f;
+    float LeanAmount = 0.f;
+
+    UPROPERTY(EditAnywhere, Category = "Camera|Lean")
+    float LeanOffset = 22.f;
+
+    UPROPERTY(EditAnywhere, Category = "Camera|Lean")
+    float LeanRoll = 8.f;
+
+    UPROPERTY(EditAnywhere, Category = "Camera|Lean")
+    float LeanYaw = 2.5f;
+
+    UPROPERTY(EditAnywhere, Category = "Camera|Lean")
+    float LeanInterpSpeed = 10.f;
+
+    UPROPERTY(EditAnywhere, Category = "Camera|Lean")
+    float LeanProbeRadius = 6.f;
+
+    // Head tilt (Q/E)
+    bool  bTiltLeftHeld  = false;
+    bool  bTiltRightHeld = false;
+    float TiltTarget  = 0.f;
+    float TiltCurrent = 0.f;
+
+    UPROPERTY(EditAnywhere, Category = "Camera|Tilt")
+    float TiltMaxAngle = 20.f;
+
+    UPROPERTY(EditAnywhere, Category = "Camera|Tilt")
+    float TiltInterpSpeed = 6.f;
+
+    // Weapon
+    UPROPERTY(EditAnywhere, Category = "Weapon")
+    TSubclassOf<AGun> GunClass;
+
+    AGun* CurrentGun = nullptr;
+
+    UPROPERTY(EditAnywhere, Category = "Weapon|ADS")
+    float AimFOVAdd = 14.f;
+
+    bool bIsAiming = false;
+
+    FRotator RecoilCurrent = FRotator::ZeroRotator;
+
+    UPROPERTY(EditAnywhere, Category = "Weapon|Recoil")
+    float RecoilRecoverSpeed = 8.f;
+
+    float FOVAdd = 0.f;
+
+    UPROPERTY(EditAnywhere, Category = "Weapon|Recoil")
+    float FOVRecoverSpeed = 6.f;
+
+    // Bodycam sway
+    UPROPERTY(EditAnywhere, Category = "Weapon|Sway")
+    float SwayPosScale = 28.f;
+
+    UPROPERTY(EditAnywhere, Category = "Weapon|Sway")
+    float SwayMaxOffset = 35.f;
+
+    UPROPERTY(EditAnywhere, Category = "Weapon|Sway")
+    float SwayRotScalePitch = 4.5f;
+
+    UPROPERTY(EditAnywhere, Category = "Weapon|Sway")
+    float SwayRotScaleYaw = 5.0f;
+
+    UPROPERTY(EditAnywhere, Category = "Weapon|Sway")
+    float SwayRotScaleRoll = 3.5f;
+
+    UPROPERTY(EditAnywhere, Category = "Weapon|Sway")
+    float SwayFollowSpeed = 4.f;
+
+    UPROPERTY(EditAnywhere, Category = "Weapon|Sway")
+    float SwayReturnSpeed = 3.f;
+
+    UPROPERTY(EditAnywhere, Category = "Weapon|Sway")
+    float SwayVelocitySmoothing = 10.f;
+
+    UPROPERTY(EditAnywhere, Category = "Weapon|Sway")
+    float SwayStrideAmplitude = 3.5f;
+
+    FVector  SwayVelocity   = FVector::ZeroVector;
+    FVector  SwayTargetLoc  = FVector::ZeroVector;
+    FVector  SwayCurrentLoc = FVector::ZeroVector;
+    FRotator SwayTargetRot  = FRotator::ZeroRotator;
+    FRotator SwayCurrentRot = FRotator::ZeroRotator;
+
+    float IdleSwayTime = 0.f;
+
+    void AddRecoil(float PitchDegrees, float YawDegrees);
+    void AddFOVKick(float Amount);
+};

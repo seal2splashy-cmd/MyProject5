@@ -10,6 +10,7 @@
 // measured by sweeping several points along the blade every physics sub-step.
 //
 // Mesh convention: grip at the actor root, blade along local +X, cutting edge facing +Z.
+// BladeBase/BladeTip are children of the grip, so their positions are in grip space.
 
 #pragma once
 
@@ -119,9 +120,9 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Melee|Feel", meta = (ClampMin = 0, ClampMax = 1))
 	float LookScaleWhileGuarding = 0.2f;
 
-	/** cm of hand travel per unit of look input while guarding. */
+	/** cm of hand travel per unit of look input while guarding (tuned for legacy MouseX/MouseY axes). */
 	UPROPERTY(EditAnywhere, Category = "Melee|Feel")
-	float SwingSensitivity = 1.2f;
+	float SwingSensitivity = 4.f;
 
 	UPROPERTY(EditAnywhere, Category = "Melee|Feel")
 	bool bInvertSwingY = false;

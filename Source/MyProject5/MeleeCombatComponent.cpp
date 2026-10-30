@@ -13,6 +13,7 @@
 UMeleeCombatComponent::UMeleeCombatComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false; // the weapon ticks itself
+	WeaponClass = AMeleeWeapon::StaticClass();
 }
 
 void UMeleeCombatComponent::BeginPlay()
@@ -26,14 +27,8 @@ void UMeleeCombatComponent::BeginPlay()
 		return;
 	}
 
-	if (WeaponClass)
-	{
-		SpawnWeapon(WeaponClass);
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("MeleeCombatComponent on %s: WeaponClass not set."), *GetNameSafe(GetOwner()));
-	}
+	SpawnWeapon(WeaponClass);
+	SetMeleeActive(bStartActive);
 }
 
 void UMeleeCombatComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -101,6 +96,17 @@ void UMeleeCombatComponent::EquipWeapon(TSubclassOf<AMeleeWeapon> NewWeaponClass
 	}
 	WeaponClass = NewWeaponClass;
 	SpawnWeapon(WeaponClass);
+	SetMeleeActive(bMeleeActive);
+}
+
+void UMeleeCombatComponent::SetMeleeActive(bool bActive)
+{
+	bMeleeActive = bActive;
+	if (Weapon)
+	{
+		Weapon->EndGuard();
+		Weapon->SetActorHiddenInGame(!bActive);
+	}
 }
 
 void UMeleeCombatComponent::BindInput(UInputComponent* PlayerInputComponent)
@@ -108,8 +114,7 @@ void UMeleeCombatComponent::BindInput(UInputComponent* PlayerInputComponent)
 	UEnhancedInputComponent* EIC = Cast<UEnhancedInputComponent>(PlayerInputComponent);
 	if (!EIC)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("MeleeCombatComponent: input component isn't Enhanced Input, melee input not bound."));
-		return;
+		return; // legacy input: the pawn calls StartGuard/StopGuard/DoThrust itself
 	}
 
 	if (GuardAction)
@@ -127,7 +132,7 @@ void UMeleeCombatComponent::BindInput(UInputComponent* PlayerInputComponent)
 
 FVector2D UMeleeCombatComponent::FilterLook(const FVector2D& RawLookDelta)
 {
-	if (!Weapon)
+	if (!Weapon || !bMeleeActive)
 	{
 		return RawLookDelta;
 	}
@@ -136,15 +141,15 @@ FVector2D UMeleeCombatComponent::FilterLook(const FVector2D& RawLookDelta)
 	return RawLookDelta * Weapon->GetLookScale();
 }
 
-void UMeleeCombatComponent::OnGuardStarted(const FInputActionValue& /*Value*/)
+void UMeleeCombatComponent::StartGuard()
 {
-	if (Weapon)
+	if (Weapon && bMeleeActive)
 	{
 		Weapon->BeginGuard();
 	}
 }
 
-void UMeleeCombatComponent::OnGuardEnded(const FInputActionValue& /*Value*/)
+void UMeleeCombatComponent::StopGuard()
 {
 	if (Weapon)
 	{
@@ -152,10 +157,14 @@ void UMeleeCombatComponent::OnGuardEnded(const FInputActionValue& /*Value*/)
 	}
 }
 
-void UMeleeCombatComponent::OnThrust(const FInputActionValue& /*Value*/)
+void UMeleeCombatComponent::DoThrust()
 {
-	if (Weapon)
+	if (Weapon && bMeleeActive)
 	{
 		Weapon->Thrust();
 	}
 }
+
+void UMeleeCombatComponent::OnGuardStarted(const FInputActionValue& /*Value*/) { StartGuard(); }
+void UMeleeCombatComponent::OnGuardEnded(const FInputActionValue& /*Value*/)   { StopGuard(); }
+void UMeleeCombatComponent::OnThrust(const FInputActionValue& /*Value*/)       { DoThrust(); }

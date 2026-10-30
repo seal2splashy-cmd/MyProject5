@@ -11,6 +11,7 @@
 #include "GameFramework/DamageType.h"
 #include "GameFramework/Pawn.h"
 #include "Kismet/GameplayStatics.h"
+#include "UObject/ConstructorHelpers.h"
 
 AMeleeWeapon::AMeleeWeapon()
 {
@@ -24,13 +25,28 @@ AMeleeWeapon::AMeleeWeapon()
 	Mesh->SetupAttachment(Root);
 	Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision); // we do our own sweeps
 	Mesh->SetGenerateOverlapEvents(false);
+	Mesh->CastShadow = false;
 
+	// Default look: a 90 cm metal pipe built from the engine cylinder, so the weapon
+	// is visible even before you make a Blueprint with a real mesh.
+	// The cylinder's long axis is Z, so pitch -90 turns it to point along the grip's +X.
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> PipeMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+	if (PipeMesh.Succeeded())
+	{
+		Mesh->SetStaticMesh(PipeMesh.Object);
+	}
+	Mesh->SetRelativeLocation(FVector(45.f, 0.f, 0.f));
+	Mesh->SetRelativeRotation(FRotator(-90.f, 0.f, 0.f));
+	Mesh->SetRelativeScale3D(FVector(0.04f, 0.04f, 0.9f));
+
+	// Blade points live in GRIP space (not mesh space), so swapping the mesh or its
+	// scale never moves the hitbox. Drag these to the ends of the striking surface.
 	BladeBase = CreateDefaultSubobject<USceneComponent>(TEXT("BladeBase"));
-	BladeBase->SetupAttachment(Mesh);
-	BladeBase->SetRelativeLocation(FVector(15.f, 0.f, 0.f));
+	BladeBase->SetupAttachment(Root);
+	BladeBase->SetRelativeLocation(FVector(20.f, 0.f, 0.f));
 
 	BladeTip = CreateDefaultSubobject<USceneComponent>(TEXT("BladeTip"));
-	BladeTip->SetupAttachment(Mesh);
+	BladeTip->SetupAttachment(Root);
 	BladeTip->SetRelativeLocation(FVector(90.f, 0.f, 0.f));
 }
 
@@ -44,9 +60,8 @@ void AMeleeWeapon::CacheBladeLocals()
 {
 	// Blade points relative to the grip, so we can evaluate them for any
 	// sub-step pose without actually moving the actor.
-	const FTransform MeshRel = Mesh->GetRelativeTransform();
-	LocalBase = MeshRel.TransformPosition(BladeBase->GetRelativeLocation());
-	LocalTip = MeshRel.TransformPosition(BladeTip->GetRelativeLocation());
+	LocalBase = BladeBase->GetRelativeLocation();
+	LocalTip = BladeTip->GetRelativeLocation();
 }
 
 void AMeleeWeapon::InitialiseFor(UCameraComponent* InCamera)
@@ -177,7 +192,8 @@ void AMeleeWeapon::Tick(float DeltaSeconds)
 	const FTransform CamXf = Cam->GetComponentTransform();
 	const FVector CamPos = CamXf.GetLocation();
 
-	if (FVector::DistSquared(CamPos, LastCameraPos) > FMath::Square(TeleportSnapDistance))
+	// Holstered: just follow the hand, never sweep, so idle sway can't hurt anything
+	if (IsHidden() || FVector::DistSquared(CamPos, LastCameraPos) > FMath::Square(TeleportSnapDistance))
 	{
 		SnapToTarget(CamXf);
 		return;
