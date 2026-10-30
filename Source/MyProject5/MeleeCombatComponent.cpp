@@ -3,6 +3,7 @@
 #include "MeleeCombatComponent.h"
 
 #include "MeleeWeapon.h"
+#include "MeleeWeaponTypes.h"
 
 #include "Camera/CameraComponent.h"
 #include "EnhancedInputComponent.h"
@@ -13,7 +14,19 @@
 UMeleeCombatComponent::UMeleeCombatComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false; // the weapon ticks itself
-	WeaponClass = AMeleeWeapon::StaticClass();
+
+	WeaponClasses.Add(AMeleePipe::StaticClass());
+	WeaponClasses.Add(AMeleeCrowbar::StaticClass());
+	WeaponClasses.Add(AMeleeMachete::StaticClass());
+	WeaponClasses.Add(AMeleeFireAxe::StaticClass());
+	WeaponClass = WeaponClasses[0];
+}
+
+void UMeleeCombatComponent::CycleWeapon()
+{
+	if (WeaponClasses.Num() == 0) return;
+	WeaponIndex = (WeaponIndex + 1) % WeaponClasses.Num();
+	EquipWeapon(WeaponClasses[WeaponIndex]);
 }
 
 void UMeleeCombatComponent::BeginPlay()
@@ -27,6 +40,10 @@ void UMeleeCombatComponent::BeginPlay()
 		return;
 	}
 
+	if (WeaponClasses.Num() > 0 && WeaponClasses[0])
+	{
+		WeaponClass = WeaponClasses[0];
+	}
 	SpawnWeapon(WeaponClass);
 	SetMeleeActive(bStartActive);
 }

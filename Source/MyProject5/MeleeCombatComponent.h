@@ -49,12 +49,20 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Melee")
 	void EquipWeapon(TSubclassOf<AMeleeWeapon> NewWeaponClass);
 
+	/** Next weapon in WeaponClasses (wraps round). */
+	UFUNCTION(BlueprintCallable, Category = "Melee")
+	void CycleWeapon();
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	/** Defaults to the plain AMeleeWeapon (a pipe). Point it at a Blueprint child for real meshes. */
+	/** The weapons you can cycle through with the melee key. First one is equipped at start. */
 	UPROPERTY(EditAnywhere, Category = "Melee")
+	TArray<TSubclassOf<AMeleeWeapon>> WeaponClasses;
+
+	/** Currently spawned weapon class. */
+	UPROPERTY(VisibleInstanceOnly, Category = "Melee")
 	TSubclassOf<AMeleeWeapon> WeaponClass;
 
 	UPROPERTY(EditAnywhere, Category = "Melee")
@@ -76,6 +84,7 @@ private:
 
 	TWeakObjectPtr<UCameraComponent> Camera;
 	bool bMeleeActive = false;
+	int32 WeaponIndex = 0;
 
 	UCameraComponent* FindOwnerCamera() const;
 	void SpawnWeapon(TSubclassOf<AMeleeWeapon> ClassToSpawn);

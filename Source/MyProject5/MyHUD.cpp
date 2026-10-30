@@ -30,6 +30,13 @@ void AMyHUD::DrawHUD()
             // No crosshair with melee - you aim with your body, like real life
             bDrawCrosshair = !FPSPawn->IsMeleeEquipped();
 
+            if (!bDrawCrosshair)
+            {
+                const FString Label = FPSPawn->GetMeleeWeaponName().ToUpper() + TEXT("   [2] swap");
+                DrawText(Label, FLinearColor(1.f, 1.f, 1.f, 0.7f),
+                    Canvas->SizeX - 260.f, Canvas->SizeY - 64.f, GEngine ? GEngine->GetMediumFont() : nullptr);
+            }
+
             if (AGun* Gun = FPSPawn->GetCurrentGun())
             {
                 if (bDrawCrosshair)

@@ -22,6 +22,9 @@
 class UCameraComponent;
 class USceneComponent;
 class UStaticMeshComponent;
+class UStaticMesh;
+class USoundBase;
+class UMaterialInterface;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnMeleeImpact, const FHitResult&, Hit, float, ImpactSpeed, bool, bHitFlesh);
 
@@ -59,12 +62,65 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Melee")
 	bool IsGuarding() const { return bGuarding; }
 
+	/** Name shown on the HUD. */
+	const FString& GetDisplayName() const { return DisplayName; }
+
 	/** Fires on every contact. Hook camera shake, hit-stop, sparks, blood and audio here. */
 	UPROPERTY(BlueprintAssignable, Category = "Melee")
 	FOnMeleeImpact OnMeleeImpact;
 
 protected:
 	virtual void BeginPlay() override;
+
+	/**
+	 * Adds a visual part built from an engine basic shape (no import needed, so the
+	 * orientation is always right). Call from a subclass constructor. Location/scale are
+	 * in grip space; a cylinder's long axis is its local Z (use pitch -90 to point it along +X).
+	 * MaterialPath is optional (e.g. a generated /Game/Generated/Materials/... material);
+	 * if it doesn't exist the part falls back to the engine's tintable BasicShapeMaterial.
+	 */
+	UStaticMeshComponent* AddPart(FName Name, bool bCube, const FVector& Loc, const FRotator& Rot,
+		const FVector& Scale, const FLinearColor& Colour, const TCHAR* MaterialPath = nullptr);
+
+	/** Restyle the default Mesh component (index 0 of the parts). */
+	void SetMainPart(bool bCube, const FVector& Loc, const FRotator& Rot, const FVector& Scale,
+		const FLinearColor& Colour, const TCHAR* MaterialPath = nullptr);
+
+	void SetBladePoints(const FVector& Base, const FVector& Tip);
+
+	// ---------- Look ----------
+	UPROPERTY(EditAnywhere, Category = "Melee|Look")
+	FString DisplayName = TEXT("Pipe");
+
+	UPROPERTY(VisibleAnywhere, Category = "Melee|Look")
+	TArray<TObjectPtr<UStaticMeshComponent>> Parts;   // [0] = Mesh
+
+	UPROPERTY(EditAnywhere, Category = "Melee|Look")
+	TArray<FLinearColor> PartColours;
+
+	UPROPERTY(EditAnywhere, Category = "Melee|Look")
+	TArray<TSoftObjectPtr<UMaterialInterface>> PartMaterials;
+
+	// ---------- Audio ----------
+	UPROPERTY(EditAnywhere, Category = "Melee|Audio")
+	TArray<TSoftObjectPtr<USoundBase>> WhooshSounds;
+
+	UPROPERTY(EditAnywhere, Category = "Melee|Audio")
+	TArray<TSoftObjectPtr<USoundBase>> FleshHitSounds;
+
+	UPROPERTY(EditAnywhere, Category = "Melee|Audio")
+	TArray<TSoftObjectPtr<USoundBase>> HardHitSounds;
+
+	/** Hand speed relative to the camera (cm/s) that counts as a swing worth a whoosh. */
+	UPROPERTY(EditAnywhere, Category = "Melee|Audio")
+	float WhooshSpeed = 450.f;
+
+	/** Below this into-surface speed a contact is silent (resting against a wall, etc). */
+	UPROPERTY(EditAnywhere, Category = "Melee|Audio")
+	float MinImpactSoundSpeed = 150.f;
+
+	UPROPERTY(EditAnywhere, Category = "Melee|Audio")
+	float SoundVolume = 1.f;
 
 	// ---------- Components ----------
 	UPROPERTY(VisibleAnywhere, Category = "Melee")
@@ -198,6 +254,20 @@ private:
 
 	TArray<FVector> PrevBladePoints;
 	TSet<TWeakObjectPtr<AActor>> HitThisSwing;
+
+	// engine shapes, grabbed once in the constructor for AddPart()
+	UPROPERTY(Transient)
+	TObjectPtr<UStaticMesh> CubeShape;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UStaticMesh> CylinderShape;
+
+	bool bWasFastLastFrame = false;
+	float LastWhooshTime = -10.f;
+	float LastImpactSoundTime = -10.f;
+
+	void ApplyLook();
+	void PlayRandom(const TArray<TSoftObjectPtr<USoundBase>>& Sounds, const FVector& Where, float Volume, float Pitch);
 
 	void CacheBladeLocals();
 	void SnapToTarget(const FTransform& CamXf);

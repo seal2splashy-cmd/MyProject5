@@ -15,6 +15,9 @@
 #include "Engine/DamageEvents.h"
 #include "Kismet/GameplayStatics.h"
 #include "CoreGlobals.h"
+#include "Sound/SoundBase.h"
+#include "Components/AudioComponent.h"
+#include "MeleeWeapon.h"
 
 AMyFPSPawn::AMyFPSPawn()
 {
@@ -54,6 +57,16 @@ AMyFPSPawn::AMyFPSPawn()
 
     // Physics melee
     Melee = CreateDefaultSubobject<UMeleeCombatComponent>(TEXT("Melee"));
+
+    // Generated audio
+    auto Snd = [](const TCHAR* Name)
+    {
+        return TSoftObjectPtr<USoundBase>(FSoftObjectPath(FString::Printf(TEXT("/Game/Generated/Audio/%s.%s"), Name, Name)));
+    };
+    FootstepSounds = { Snd(TEXT("SW_Footstep_Concrete_01")), Snd(TEXT("SW_Footstep_Concrete_02")),
+                       Snd(TEXT("SW_Footstep_Concrete_03")), Snd(TEXT("SW_Footstep_Concrete_04")) };
+    HurtSound      = Snd(TEXT("SW_Player_Hurt"));
+    AmbienceSound  = Snd(TEXT("SW_Ambience_BodycamHiss_Loop"));
 
     AutoPossessPlayer = EAutoReceiveInput::Player0;
     bUseControllerRotationYaw = true;
@@ -102,6 +115,43 @@ void AMyFPSPawn::BeginPlay()
     bIsDead = false;
 
     SetupArms();
+
+    // Constant bodycam mic hiss (the imported wave is set to loop)
+    if (USoundBase* Amb = AmbienceSound.LoadSynchronous())
+    {
+        AmbienceComponent = UGameplayStatics::SpawnSound2D(this, Amb, AmbienceVolume);
+    }
+}
+
+// ------------------------------------------------------------------ footsteps
+
+void AMyFPSPawn::PlayFootstep(float Volume)
+{
+    if (FootstepSounds.Num() == 0) return;
+    if (USoundBase* S = FootstepSounds[FMath::RandRange(0, FootstepSounds.Num() - 1)].LoadSynchronous())
+    {
+        const FVector Feet = GetActorLocation() - FVector(0.f, 0.f, CapsuleComponent->GetScaledCapsuleHalfHeight());
+        UGameplayStatics::PlaySoundAtLocation(this, S, Feet, Volume * FootstepVolume, FMath::FRandRange(0.92f, 1.08f));
+    }
+}
+
+void AMyFPSPawn::UpdateFootsteps()
+{
+    // One step per headbob cycle, landing on the bottom of the bob (sin = -1 at 1.5 pi)
+    if (!bEnableHeadBob || HeadBobTimer <= 0.f)
+    {
+        LastStepIndex = 0;
+        return;
+    }
+    const int32 StepIndex = FMath::FloorToInt((HeadBobTimer + 0.5f * UE_PI) / (2.f * UE_PI));
+    if (StepIndex != LastStepIndex)
+    {
+        LastStepIndex = StepIndex;
+        float Vol = 0.7f;
+        if (bIsRunning)   Vol = 1.f;
+        if (bIsCrouching) Vol = 0.35f;
+        PlayFootstep(Vol);
+    }
 }
 
 // ------------------------------------------------------------------ arms
@@ -157,6 +207,12 @@ float AMyFPSPawn::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent
     CurrentHealth -= DamageAmount;
     CurrentHealth = FMath::Max(0.f, CurrentHealth);
 
+    if (USoundBase* S = HurtSound.LoadSynchronous())
+    {
+        UGameplayStatics::PlaySound2D(this, S, 1.f, FMath::FRandRange(0.9f, 1.05f));
+    }
+    LandingShakeImpulse = FMath::Max(LandingShakeImpulse, 4.f);   // flinch
+
     if (CurrentHealth <= 0.f)
     {
         OnDeath();
@@ -193,6 +249,15 @@ bool AMyFPSPawn::IsMeleeEquipped() const
     return Melee && Melee->IsMeleeActive();
 }
 
+FString AMyFPSPawn::GetMeleeWeaponName() const
+{
+    if (Melee && Melee->GetWeapon())
+    {
+        return Melee->GetWeapon()->GetDisplayName();
+    }
+    return FString();
+}
+
 void AMyFPSPawn::EquipGun()
 {
     if (bIsDead) return;
@@ -203,6 +268,14 @@ void AMyFPSPawn::EquipGun()
 void AMyFPSPawn::EquipMelee()
 {
     if (bIsDead) return;
+
+    // Already holding a melee weapon? Pressing 2 again swaps to the next one.
+    if (IsMeleeEquipped())
+    {
+        Melee->CycleWeapon();
+        return;
+    }
+
     bIsAiming = false;
     if (CurrentGun) CurrentGun->SetGunHidden(true);
     if (Melee) Melee->SetMeleeActive(true);
@@ -254,6 +327,8 @@ void AMyFPSPawn::Tick(float DeltaTime)
 
             if (!bWasOnGround && bEnableCameraShake)
                 LandingShakeImpulse = LandingShakeAmountDeg;
+            if (!bWasOnGround)
+                PlayFootstep(1.2f);   // landing thud
         }
         Velocity.Z = 0.f;
     }
@@ -419,6 +494,7 @@ void AMyFPSPawn::Tick(float DeltaTime)
         CurrentGun->ApplyFirstPersonOffset(SwayCurrentLoc, SwayCurrentRot);
 
     UpdateArmsAnimation();
+    UpdateFootsteps();
 }
 
 void AMyFPSPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)

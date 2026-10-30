@@ -7,6 +7,8 @@
 #include "Engine/World.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/PlayerController.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 
 #define PATH_GUN_STATIC_MESH TEXT("/Game/Fab/GUN_Pistol_Orange/pistolorange.pistolorange")
 
@@ -43,6 +45,19 @@ AGun::AGun()
     MeshComp->SetRelativeScale3D(FVector(0.6f));
 
     BulletClass = ABullet::StaticClass();
+
+    FireSound    = TSoftObjectPtr<USoundBase>(FSoftObjectPath(TEXT("/Game/Generated/Audio/SW_Gun_Shot.SW_Gun_Shot")));
+    DryFireSound = TSoftObjectPtr<USoundBase>(FSoftObjectPath(TEXT("/Game/Generated/Audio/SW_Gun_DryFire.SW_Gun_DryFire")));
+    ReloadSound  = TSoftObjectPtr<USoundBase>(FSoftObjectPath(TEXT("/Game/Generated/Audio/SW_Gun_Reload.SW_Gun_Reload")));
+}
+
+void AGun::PlayGunSound(const TSoftObjectPtr<USoundBase>& Sound, float Volume, float PitchJitter)
+{
+    if (USoundBase* S = Sound.LoadSynchronous())
+    {
+        const float Pitch = 1.f + FMath::FRandRange(-PitchJitter, PitchJitter);
+        UGameplayStatics::PlaySoundAtLocation(this, S, GetActorLocation(), Volume, Pitch);
+    }
 }
 
 void AGun::BeginPlay()
@@ -85,12 +100,15 @@ bool AGun::Fire(const FVector& EyeLocation, const FRotator& EyeRotation, AContro
 
     if (AmmoInMag <= 0)
     {
+        LastFireTime = Now;                 // rate-limit the click too
+        PlayGunSound(DryFireSound, 0.8f);
         StartReload();
         return false;
     }
 
     AmmoInMag = FMath::Max(0, AmmoInMag - 1);
     LastFireTime = Now;
+    PlayGunSound(FireSound, 1.f, 0.04f);
 
     FVector MuzzleWorldLoc;
     FRotator MuzzleWorldRot;
@@ -144,6 +162,7 @@ void AGun::StartReload()
     if (ReserveAmmo <= 0) return;
 
     bReloading = true;
+    PlayGunSound(ReloadSound, 0.9f);
     GetWorld()->GetTimerManager().SetTimer(TimerHandle_Reload, this, &AGun::FinishReload, ReloadTime, false);
 }
 
