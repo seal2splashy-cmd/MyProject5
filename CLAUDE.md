@@ -15,16 +15,22 @@
 - ASmartEnemy - AEnemy + Q-learning (FQLearningAgent + FPlayerTracker), Saved/QLearning/qtable.json
 - AMyHUD - dynamic crosshair, health/stamina bars, ammo, death screen
 - AMeleeWeapon - physics melee: spring-damper hand, mouse-steered guard, velocity-based damage
-- UMeleeCombatComponent - glue between pawn and melee weapon
+- UMeleeCombatComponent - glue between pawn and melee weapon, holds the weapon list
+- AMeleePipe / AMeleeCrowbar / AMeleeMachete / AMeleeFireAxe (MeleeWeaponTypes) - built from engine shapes
+
+## Assets
+- Assets/ holds generated WAVs/PNGs (Tools/generate_assets.py); Tools/ue_setup_project.py imports them
+  to /Game/Generated, builds materials and /Game/Maps/TestArena. Code loads them by soft path and
+  silently skips anything missing. See README_ASSETS.md.
 
 ## Controls
 WASD move, Shift sprint, Ctrl crouch (slide while sprinting), Space jump, Q/E head tilt, Z/C lean,
-1 gun, 2 melee. Gun: LMB fire, RMB aim, R reload. Melee: hold RMB + move mouse to steer, LMB thrust.
+1 gun, 2 melee (press 2 again to cycle pipe/crowbar/machete/axe). Gun: LMB fire, RMB aim, R reload. Melee: hold RMB + move mouse to steer, LMB thrust.
 
 ## Still to do
 - Hand IK onto the melee weapon (arms currently hide with the gun)
 - Fear wobble + one/two-hand grip modes for melee
-- Audio hooks (AMeleeWeapon::OnMeleeImpact is ready for them)
+- Surface-specific impact sounds (bReturnPhysicalMaterial is already on in the melee sweep)
 - NavMesh pathfinding (enemies use direct-line MoveTowards)
 - Line of sight on by default (bUseLineOfSight)
 
