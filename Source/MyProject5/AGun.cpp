@@ -260,12 +260,12 @@ FVector AGun::GetMuzzleAimPoint(float Distance) const
     return MuzzleLoc + AimRot.Vector() * Distance;
 }
 
-void AGun::SetGunHidden(bool bHidden)
+void AGun::SetGunHidden(bool bShouldHide)
 {
-    SetActorHiddenInGame(bHidden);
+    SetActorHiddenInGame(bShouldHide);
     if (MeshComp)
     {
         // propagate so the attached arms hide with it
-        MeshComp->SetVisibility(!bHidden, true);
+        MeshComp->SetVisibility(!bShouldHide, true);
     }
 }

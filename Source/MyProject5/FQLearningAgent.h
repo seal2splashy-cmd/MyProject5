@@ -18,6 +18,7 @@ enum class ESmartAction : uint8
 };
 
 static constexpr int32 kNumActions = 6;
+static constexpr int32 kNumStates  = 162;   // must match FPlayerTracker's encoding
 
 struct FStateActionPair
 {
@@ -31,7 +32,7 @@ struct FStateActionPair
 
     friend uint32 GetTypeHash(const FStateActionPair& SAP)
     {
-        return HashCombine(GetTypeHash(SAP.State), GetTypeHash(SAP.Action));
+        return HashCombineFast(GetTypeHash(SAP.State), GetTypeHash(SAP.Action));
     }
 };
 

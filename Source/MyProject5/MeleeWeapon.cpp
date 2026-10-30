@@ -275,6 +275,22 @@ bool AMeleeWeapon::SweepBlade(const TArray<FVector>& From, const TArray<FVector>
 		}
 	}
 
+	FCollisionObjectQueryParams ObjQuery;
+	if (HitObjectTypes.Num() > 0)
+	{
+		for (const TEnumAsByte<EObjectTypeQuery>& Type : HitObjectTypes)
+		{
+			ObjQuery.AddObjectTypesToQuery(UEngineTypes::ConvertToCollisionChannel(Type));
+		}
+	}
+	else
+	{
+		ObjQuery.AddObjectTypesToQuery(ECC_Pawn);
+		ObjQuery.AddObjectTypesToQuery(ECC_WorldStatic);
+		ObjQuery.AddObjectTypesToQuery(ECC_WorldDynamic);
+		ObjQuery.AddObjectTypesToQuery(ECC_PhysicsBody);
+	}
+
 	const FCollisionShape Sphere = FCollisionShape::MakeSphere(TraceRadius);
 
 	// Tip first: it moves fastest, so it's the most likely to be the "real" hit.
@@ -286,7 +302,7 @@ bool AMeleeWeapon::SweepBlade(const TArray<FVector>& From, const TArray<FVector>
 		}
 
 		FHitResult Hit;
-		if (World->SweepSingleByChannel(Hit, From[i], To[i], FQuat::Identity, TraceChannel, Sphere, Params))
+		if (World->SweepSingleByObjectType(Hit, From[i], To[i], FQuat::Identity, ObjQuery, Sphere, Params))
 		{
 			HandleHit(Hit, (To[i] - From[i]) / StepDt);
 			return true;

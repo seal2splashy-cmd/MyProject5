@@ -94,17 +94,18 @@ void FQLearningAgent::LoadQTable(const FString& FilePath)
     const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(InputStr);
     if (!FJsonSerializer::Deserialize(Reader, JsonObj) || !JsonObj.IsValid()) return;   // corrupt file
 
+    // FJsonObject's key type changed between engine versions (FString -> TSharedString),
+    // so rather than iterating the raw map we look up every possible "state_action" key.
+    // 162 x 6 = 972 lookups at load time - trivial, and version-proof.
     QTable.Empty();
-    for (const auto& Field : JsonObj->Values)
+    for (int32 S = 0; S < kNumStates; ++S)
     {
-        int32 UnderIdx = INDEX_NONE;
-        if (Field.Key.FindChar(TEXT('_'), UnderIdx))
+        for (int32 A = 0; A < kNumActions; ++A)
         {
-            const int32 S = FCString::Atoi(*Field.Key.Left(UnderIdx));
-            const int32 A = FCString::Atoi(*Field.Key.Mid(UnderIdx + 1));
-            if (A >= 0 && A < kNumActions && Field.Value.IsValid())
+            double Value = 0.0;
+            if (JsonObj->TryGetNumberField(FString::Printf(TEXT("%d_%d"), S, A), Value))
             {
-                QTable.Add(FStateActionPair{ S, A }, (float)Field.Value->AsNumber());
+                QTable.Add(FStateActionPair{ S, A }, (float)Value);
             }
         }
     }

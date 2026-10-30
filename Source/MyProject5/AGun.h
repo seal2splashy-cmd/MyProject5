@@ -38,7 +38,7 @@ public:
     UStaticMeshComponent* GetGunMesh() const { return MeshComp; }
 
     /** Hide/show the gun (used when swapping to melee). */
-    void SetGunHidden(bool bHidden);
+    void SetGunHidden(bool bShouldHide);
 
 protected:
     virtual void BeginPlay() override;

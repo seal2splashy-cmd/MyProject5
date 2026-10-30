@@ -36,9 +36,9 @@ AMyFPSPawn::AMyFPSPawn()
     CameraComponent->FieldOfView = BaseFOV;
     CameraComponent->bUsePawnControlRotation = false;
 
-    // Near clip fix so the arms/gun don't get cut off right in front of the lens
-    CameraComponent->bOverrideCustomNearClipPlane = true;
-    CameraComponent->CustomNearClipPlane = 1.0f;
+    // Near clip: set project-wide in Config/DefaultEngine.ini (NearClipPlane=1.0) so the
+    // arms/gun don't get cut off in front of the lens. The per-camera override members
+    // don't exist on UCameraComponent in this engine version.
 
     // First-person arms - re-attached to the gun mesh in BeginPlay
     ArmsMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("ArmsMesh"));

@@ -51,7 +51,6 @@ void AEnemy::BeginPlay()
         if (UCapsuleComponent* Cap = GetCapsuleComponent())
         {
             Cap->SetHiddenInGame(false);
-            Cap->ShapeColor = FColor::Red;
         }
     }
 }

@@ -161,9 +161,10 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Melee|Combat", meta = (ClampMin = 2, ClampMax = 12))
 	int32 BladeSamples = 4;
 
-	/** Ideally a custom "Melee" trace channel that enemy meshes (physics asset) block. */
+	/** Object types the blade can hit (same idea as ABullet). The default Pawn profile
+	 *  ignores the Visibility channel, so an object-type sweep is what actually hits enemies. */
 	UPROPERTY(EditAnywhere, Category = "Melee|Combat")
-	TEnumAsByte<ECollisionChannel> TraceChannel = ECC_Visibility;
+	TArray<TEnumAsByte<EObjectTypeQuery>> HitObjectTypes;
 
 	/** How much a wall/prop bounces the blade back. */
 	UPROPERTY(EditAnywhere, Category = "Melee|Combat", meta = (ClampMin = 0, ClampMax = 1))
