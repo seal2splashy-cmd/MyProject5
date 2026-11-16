@@ -42,6 +42,9 @@ AMeleePipe::AMeleePipe()
 
 	SetBladePoints(FVector(25.f, 0.f, 0.f), FVector(92.f, 0.f, 0.f));
 
+	MainHandOffset = 12.f;     // both hands on the taped end
+	SecondHandOffset = 2.f;
+
 	MassKg = 1.8f;
 	Stiffness = 950.f;
 	DampingRatio = 0.55f;
@@ -68,6 +71,9 @@ AMeleeCrowbar::AMeleeCrowbar()
 
 	SetBladePoints(FVector(18.f, 0.f, 0.f), FVector(84.f, 0.f, 11.f));
 
+	MainHandOffset = 11.f;
+	SecondHandOffset = 2.f;
+
 	MassKg = 1.4f;
 	Stiffness = 850.f;
 	DampingRatio = 0.5f;
@@ -92,6 +98,9 @@ AMeleeMachete::AMeleeMachete()
 	AddPart(TEXT("Tip"), true, FVector(65.f, 0.f, 2.f), FRotator(45.f, 0.f, 0.f), Box(4.2f, 0.35f, 4.2f), Steel);
 
 	SetBladePoints(FVector(17.f, 0.f, 3.f), FVector(67.f, 0.f, 3.f));
+
+	bTwoHanded = false;        // one-handed: the left hand stays free
+	MainHandOffset = 7.f;
 
 	MassKg = 0.9f;
 	Stiffness = 700.f;
@@ -118,6 +127,9 @@ AMeleeFireAxe::AMeleeFireAxe()
 	AddPart(TEXT("Spike"), true, FVector(80.f, 0.f, -7.f), FRotator(0.f, 0.f, 0.f), Box(3.f, 2.2f, 7.f), FireRed);
 
 	SetBladePoints(FVector(60.f, 0.f, 4.f), FVector(82.f, 0.f, 14.f));
+
+	MainHandOffset = 20.f;     // dominant hand choked up, other hand near the end of the haft
+	SecondHandOffset = 4.f;
 
 	MassKg = 2.8f;
 	Stiffness = 1300.f;

@@ -18,6 +18,7 @@
 #include "Sound/SoundBase.h"
 #include "Components/AudioComponent.h"
 #include "MeleeWeapon.h"
+#include "OperatorArmsComponent.h"
 
 AMyFPSPawn::AMyFPSPawn()
 {
@@ -54,6 +55,10 @@ AMyFPSPawn::AMyFPSPawn()
     ArmsMeshAsset = TSoftObjectPtr<USkeletalMesh>(FSoftObjectPath(TEXT("/Game/character.character")));
     ArmsIdleAnim  = TSoftObjectPtr<UAnimationAsset>(FSoftObjectPath(TEXT("/Game/Ch35_nonPBR__1_.Ch35_nonPBR__1_")));
     ArmsWalkAnim  = TSoftObjectPtr<UAnimationAsset>(FSoftObjectPath(TEXT("/Game/Pistol_Walk.Pistol_Walk")));
+
+    // IK-driven first-person arms (Anomaly Hunter Containment Operator)
+    OperatorArms = CreateDefaultSubobject<UOperatorArmsComponent>(TEXT("OperatorArms"));
+    OperatorArms->SetupAttachment(CameraComponent);
 
     // Physics melee
     Melee = CreateDefaultSubobject<UMeleeCombatComponent>(TEXT("Melee"));
@@ -158,6 +163,23 @@ void AMyFPSPawn::UpdateFootsteps()
 
 void AMyFPSPawn::SetupArms()
 {
+    // Preferred: the IK-driven Containment Operator arms (grip the gun and the melee weapons)
+    if (OperatorArms)
+    {
+        OperatorArms->SetSources(CurrentGun, Melee);
+        bUsingOperatorArms = OperatorArms->InitOperatorArms();
+    }
+    if (bUsingOperatorArms)
+    {
+        if (ArmsMesh)
+        {
+            ArmsMesh->SetVisibility(false);
+            ArmsMesh->SetComponentTickEnabled(false);
+        }
+        return;
+    }
+
+    // Fallback: the old Mixamo arms, glued to the gun mesh
     if (!ArmsMesh) return;
 
     if (USkeletalMesh* MeshAsset = ArmsMeshAsset.LoadSynchronous())
@@ -181,6 +203,7 @@ void AMyFPSPawn::SetupArms()
 
 void AMyFPSPawn::UpdateArmsAnimation()
 {
+    if (bUsingOperatorArms) return;   // operator arms pose themselves
     if (!ArmsMesh || !ArmsMesh->GetSkeletalMeshAsset()) return;
 
     const int32 Want = (!MovementInput.IsNearlyZero() && bIsOnGround) ? 1 : 0;
@@ -231,6 +254,7 @@ void AMyFPSPawn::OnDeath()
     bIsRunning = false;
     bIsAiming = false;
     if (Melee) Melee->StopGuard();
+    if (OperatorArms) OperatorArms->SetVisibility(false);
 
     // HUD reads bIsDead to draw the death screen; we reload the level after a delay
     GetWorldTimerManager().SetTimer(TimerHandle_Respawn, this, &AMyFPSPawn::Respawn, RespawnDelay, false);

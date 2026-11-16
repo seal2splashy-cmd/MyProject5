@@ -41,6 +41,12 @@ public:
     /** Hide/show the gun (used when swapping to melee). */
     void SetGunHidden(bool bShouldHide);
 
+    /**
+     * Where the operator arms' hands should grip, world space. Follows the gun's sway.
+     * OutAxis runs up the grip (towards the slide). Returns false while the gun is holstered.
+     */
+    bool GetHandTargets(FVector& OutRightGrip, FVector& OutLeftGrip, FVector& OutAxis) const;
+
 protected:
     virtual void BeginPlay() override;
 
@@ -86,6 +92,19 @@ private:
 
     UPROPERTY(EditAnywhere, Category = "Gun|Visual")
     FVector MuzzleOffsetLocal = FVector(42.f, 8.f, -5.f);
+
+    // ---- Hands (operator arms). Camera-aligned frame: X forward, Y right, Z up, cm,
+    //      relative to the gun's pivot. Tweak live in PIE until the hands sit on your mesh's grip.
+    UPROPERTY(EditAnywhere, Category = "Gun|Hands")
+    FVector GripOffset = FVector(-3.f, 0.f, -7.f);
+
+    /** Direction up the grip towards the slide (pistol grips rake back, so this tips forward). */
+    UPROPERTY(EditAnywhere, Category = "Gun|Hands")
+    FVector GripAxis = FVector(0.25f, 0.f, 1.f);
+
+    /** Support (left) hand relative to the right hand's grip. */
+    UPROPERTY(EditAnywhere, Category = "Gun|Hands")
+    FVector SupportHandOffset = FVector(1.f, -3.f, -1.f);
 
     UPROPERTY()
     TSubclassOf<ABullet> BulletClass;

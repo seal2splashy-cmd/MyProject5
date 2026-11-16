@@ -11,3 +11,9 @@ Saved/
 *.sdf
 *.VC.db
 *.VC.opendb
+
+# Operator arms source pack / Blender exports (regenerate with Tools/OperatorArms/rig_and_export_fbx_fixed.py)
+Tools/OperatorArms/AnomalyHunter_Operator_AssetPack/
+Tools/OperatorArms/Exports/
+__pycache__/
+*.pyc

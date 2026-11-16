@@ -73,17 +73,20 @@ def fix_audio():
         eal.save_loaded_asset(wave)
 
 
-def fix_textures():
-    for name in os.listdir(os.path.join(ASSET_SRC, "Textures")):
+def fix_textures(src_dir=None, dst=TEX_DST):
+    src_dir = src_dir or os.path.join(ASSET_SRC, "Textures")
+    if not os.path.isdir(src_dir):
+        return
+    for name in os.listdir(src_dir):
         base = os.path.splitext(name)[0]
-        path = TEX_DST + "/" + base
+        path = dst + "/" + base
         if not eal.does_asset_exist(path):
             continue
         tex = eal.load_asset(path)
         if base.endswith("_N"):
             try_set(tex, "compression_settings", unreal.TextureCompressionSettings.TC_NORMALMAP)
             try_set(tex, "srgb", False)
-        elif base.endswith("_R"):
+        elif base.endswith(("_R", "_AO", "_Height")):
             try_set(tex, "compression_settings", unreal.TextureCompressionSettings.TC_MASKS)
             try_set(tex, "srgb", False)
         eal.save_loaded_asset(tex)
@@ -91,16 +94,16 @@ def fix_textures():
 
 # ======================================================================== 2. materials
 
-def tex(name):
-    path = TEX_DST + "/" + name
+def tex(name, folder=TEX_DST):
+    path = folder + "/" + name
     return eal.load_asset(path) if eal.does_asset_exist(path) else None
 
 
-def new_material(name):
-    path = MAT_DST + "/" + name
+def new_material(name, folder=MAT_DST):
+    path = folder + "/" + name
     if eal.does_asset_exist(path):
         eal.delete_asset(path)
-    return asset_tools.create_asset(name, MAT_DST, unreal.Material, unreal.MaterialFactoryNew())
+    return asset_tools.create_asset(name, folder, unreal.Material, unreal.MaterialFactoryNew())
 
 
 def world_uv(mat, tile_cm, x, y):
@@ -157,12 +160,12 @@ def mesh_uv(mat, tiling, x, y):
 
 
 def build_material(name, diffuse, normal=None, rough_tex=None, roughness=0.8, metallic=0.0,
-                   world_tile_cm=None, uv_tiling=1.0):
-    d = tex(diffuse)
+                   world_tile_cm=None, uv_tiling=1.0, ao_tex=None, tex_folder=TEX_DST, mat_folder=MAT_DST):
+    d = tex(diffuse, tex_folder)
     if d is None:
         unreal.log_warning("[MyProject5 setup] no texture %s, skipping %s" % (diffuse, name))
         return None
-    mat = new_material(name)
+    mat = new_material(name, mat_folder)
     uv = world_uv(mat, world_tile_cm, 0, 0) if world_tile_cm else mesh_uv(mat, uv_tiling, 0, 0)
 
     s_d = mel.create_material_expression(mat, unreal.MaterialExpressionTextureSample, 0, -200)
@@ -170,7 +173,7 @@ def build_material(name, diffuse, normal=None, rough_tex=None, roughness=0.8, me
     mel.connect_material_expressions(uv, "", s_d, "UVs")
     mel.connect_material_property(s_d, "RGB", unreal.MaterialProperty.MP_BASE_COLOR)
 
-    n = tex(normal) if normal else None
+    n = tex(normal, tex_folder) if normal else None
     if n:
         s_n = mel.create_material_expression(mat, unreal.MaterialExpressionTextureSample, 0, 100)
         s_n.set_editor_property("texture", n)
@@ -178,7 +181,7 @@ def build_material(name, diffuse, normal=None, rough_tex=None, roughness=0.8, me
         mel.connect_material_expressions(uv, "", s_n, "UVs")
         mel.connect_material_property(s_n, "RGB", unreal.MaterialProperty.MP_NORMAL)
 
-    r = tex(rough_tex) if rough_tex else None
+    r = tex(rough_tex, tex_folder) if rough_tex else None
     if r:
         s_r = mel.create_material_expression(mat, unreal.MaterialExpressionTextureSample, 0, 400)
         s_r.set_editor_property("texture", r)
@@ -189,6 +192,14 @@ def build_material(name, diffuse, normal=None, rough_tex=None, roughness=0.8, me
         c_r = mel.create_material_expression(mat, unreal.MaterialExpressionConstant, 200, 400)
         c_r.set_editor_property("r", roughness)
         mel.connect_material_property(c_r, "", unreal.MaterialProperty.MP_ROUGHNESS)
+
+    ao = tex(ao_tex, tex_folder) if ao_tex else None
+    if ao:
+        s_ao = mel.create_material_expression(mat, unreal.MaterialExpressionTextureSample, 0, 700)
+        s_ao.set_editor_property("texture", ao)
+        try_set(s_ao, "sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_MASKS)
+        mel.connect_material_expressions(uv, "", s_ao, "UVs")
+        mel.connect_material_property(s_ao, "R", unreal.MaterialProperty.MP_AMBIENT_OCCLUSION)
 
     if metallic > 0:
         c_m = mel.create_material_expression(mat, unreal.MaterialExpressionConstant, 200, 500)
@@ -213,6 +224,117 @@ def build_materials():
     mats["rust"] = build_material("M_RustMetal", "T_RustMetal_D", "T_RustMetal_N", "T_RustMetal_R", metallic=0.6, uv_tiling=2.0)
     mats["wood"] = build_material("M_Wood", "T_Wood_D", roughness=0.85, uv_tiling=1.0)
     return mats
+
+
+# ======================================================================== 2b. operator arms
+
+OP_SRC = os.path.join(ASSET_SRC, "OperatorArms")
+OP_DST = "/Game/Generated/Operator"
+OP_TEX_DST = OP_DST + "/Textures"
+OP_MAT_DST = OP_DST + "/Materials"
+OP_MESH_NAME = "SK_AH_ContainmentOperator_FP"   # UOperatorArmsComponent loads this path
+
+# (keyword in the FBX material slot name, material, texture stem or None, flat colour, roughness, metallic)
+OP_MATERIALS = [
+    ("fabric",    "M_Op_ContainmentFabric", "ContainmentFabric",    None,                    0.88, 0.0),
+    ("glove",     "M_Op_GlovePolymer",      "GlovePolymer",         None,                    0.64, 0.02),
+    ("composite", "M_Op_ForearmGuard",      "ForearmGuard",         None,                    0.49, 0.12),
+    ("insignia",  "M_Op_Insignia",          "Containment_Insignia", None,                    0.91, 0.0),
+    ("stitch",    "M_Op_Stitching",         None,                   (0.404, 0.435, 0.443),   0.92, 0.0),
+    ("seam",      "M_Op_SeamRecess",        None,                   (0.035, 0.051, 0.059),   0.92, 0.0),
+]
+
+
+def flat_material(name, colour, roughness, folder):
+    mat = new_material(name, folder)
+    c = mel.create_material_expression(mat, unreal.MaterialExpressionConstant3Vector, -300, 0)
+    c.set_editor_property("constant", unreal.LinearColor(colour[0], colour[1], colour[2], 1.0))
+    mel.connect_material_property(c, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    r = mel.create_material_expression(mat, unreal.MaterialExpressionConstant, -300, 200)
+    r.set_editor_property("r", roughness)
+    mel.connect_material_property(r, "", unreal.MaterialProperty.MP_ROUGHNESS)
+    mel.recompile_material(mat)
+    eal.save_loaded_asset(mat)
+    log("material " + name)
+    return mat
+
+
+def find_skeletal_mesh(folder):
+    for path in eal.list_assets(folder, recursive=True, include_folder=False):
+        asset = eal.load_asset(path)
+        if isinstance(asset, unreal.SkeletalMesh):
+            return asset
+    return None
+
+
+def import_operator_arms():
+    fbx = os.path.join(OP_SRC, OP_MESH_NAME + ".fbx")
+    if not os.path.isfile(fbx):
+        unreal.log_warning("[MyProject5 setup] no operator arms FBX at " + fbx + " - skipping")
+        return
+
+    import_folder(os.path.join(OP_SRC, "Textures"), OP_TEX_DST, {".png"})
+    fix_textures(os.path.join(OP_SRC, "Textures"), OP_TEX_DST)
+
+    task = unreal.AssetImportTask()
+    task.set_editor_property("filename", fbx)
+    task.set_editor_property("destination_path", OP_DST)
+    task.set_editor_property("destination_name", OP_MESH_NAME)
+    task.set_editor_property("automated", True)
+    task.set_editor_property("replace_existing", True)
+    task.set_editor_property("save", True)
+    # Legacy FBX options (ignored if Interchange handles FBX - its defaults are fine for this mesh)
+    opts = unreal.FbxImportUI()
+    try_set(opts, "import_as_skeletal", True)
+    try_set(opts, "mesh_type_to_import", unreal.FBXImportType.FBXIT_SKELETAL_MESH)
+    try_set(opts, "import_mesh", True)
+    try_set(opts, "import_materials", False)
+    try_set(opts, "import_textures", False)
+    try_set(opts, "import_animations", False)
+    try_set(opts, "create_physics_asset", False)
+    sk = opts.get_editor_property("skeletal_mesh_import_data")
+    try_set(sk, "import_morph_targets", False)
+    try_set(sk, "normal_import_method", unreal.FBXNormalImportMethod.FBXNIM_IMPORT_NORMALS_AND_TANGENTS)
+    try_set(opts, "skeletal_mesh_import_data", sk)
+    task.set_editor_property("options", opts)
+    asset_tools.import_asset_tasks([task])
+
+    target = OP_DST + "/" + OP_MESH_NAME
+    mesh = eal.load_asset(target) if eal.does_asset_exist(target) else None
+    if mesh is None or not isinstance(mesh, unreal.SkeletalMesh):
+        mesh = find_skeletal_mesh(OP_DST)
+        if mesh is None:
+            unreal.log_error("[MyProject5 setup] operator arms FBX imported but no skeletal mesh was created")
+            return
+        src = mesh.get_path_name().split(".")[0]
+        if src != target:
+            if eal.does_asset_exist(target):
+                eal.delete_asset(target)
+            eal.rename_asset(src, target)
+            mesh = eal.load_asset(target)
+    log("operator arms skeletal mesh: " + mesh.get_path_name())
+
+    built = {}
+    for key, name, stem, colour, rough, metal in OP_MATERIALS:
+        if stem:
+            built[key] = build_material(name, "T_%s_BC" % stem, "T_%s_N" % stem, "T_%s_R" % stem,
+                                       roughness=rough, metallic=metal, uv_tiling=1.0,
+                                       ao_tex="T_%s_AO" % stem, tex_folder=OP_TEX_DST, mat_folder=OP_MAT_DST)
+        else:
+            built[key] = flat_material(name, colour, rough, OP_MAT_DST)
+
+    slots = list(mesh.get_editor_property("materials"))
+    for slot in slots:
+        slot_name = str(slot.get_editor_property("material_slot_name")).lower()
+        for key, *_ in OP_MATERIALS:
+            if key in slot_name and built.get(key):
+                slot.set_editor_property("material_interface", built[key])
+                break
+        else:
+            unreal.log_warning("[MyProject5 setup] operator arms slot '%s' left as imported" % slot_name)
+    mesh.set_editor_property("materials", slots)
+    eal.save_loaded_asset(mesh)
+    log("operator arms materials assigned (%d slots)" % len(slots))
 
 
 # ======================================================================== 3. level
@@ -390,7 +512,7 @@ def build_level(mats):
 # ======================================================================== run
 
 def main():
-    with unreal.ScopedSlowTask(5, "MyProject5: importing assets and building test arena") as task:
+    with unreal.ScopedSlowTask(6, "MyProject5: importing assets and building test arena") as task:
         task.make_dialog(True)
         task.enter_progress_frame(1, "Importing audio")
         import_folder(os.path.join(ASSET_SRC, "Audio"), AUDIO_DST, {".wav"})
@@ -400,6 +522,8 @@ def main():
         fix_textures()
         task.enter_progress_frame(1, "Building materials")
         mats = build_materials()
+        task.enter_progress_frame(1, "Importing operator arms")
+        import_operator_arms()
         task.enter_progress_frame(1, "Building TestArena")
         build_level(mats)
         task.enter_progress_frame(1, "Done")

@@ -10,6 +10,7 @@ class USkeletalMeshComponent;
 class USkeletalMesh;
 class UAnimationAsset;
 class UMeleeCombatComponent;
+class UOperatorArmsComponent;
 class UAudioComponent;
 class USoundBase;
 class AGun;
@@ -62,9 +63,16 @@ private:
     float DeathTime = -1.f;
     FTimerHandle TimerHandle_Respawn;
 
-    // First-person arms (child of the gun mesh so they inherit all sway/recoil/bob)
+    // First-person arms.
+    // Preferred: OperatorArms (IK onto the gun / melee grip). Fallback if that mesh isn't
+    // imported: the old Mixamo ArmsMesh glued to the gun mesh.
     void SetupArms();
     void UpdateArmsAnimation();
+
+    UPROPERTY(VisibleAnywhere, Category = "Arms")
+    UOperatorArmsComponent* OperatorArms;
+
+    bool bUsingOperatorArms = false;
 
     UPROPERTY(VisibleAnywhere, Category = "Arms")
     USkeletalMeshComponent* ArmsMesh;

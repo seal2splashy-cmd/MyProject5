@@ -1,11 +1,12 @@
 # Generated assets
 
-Everything in `Assets/` is made by code, so it's free to use and easy to regenerate.
+Audio and textures in `Assets/` are made by code (free to use, easy to regenerate); the operator arms come from the Anomaly Hunter pack.
 
 | Folder | What | Made by |
 |---|---|---|
 | `Assets/Audio` | 18 WAVs: melee whooshes, flesh/metal hits, gunshot, dry fire, reload, 4 footsteps, hurt, looping bodycam hiss | `Tools/generate_assets.py` |
 | `Assets/Textures` | 8 tileable PNGs: concrete, rusted metal, wood, floor tiles (+ normals, rust roughness) | `Tools/generate_assets.py` |
+| `Assets/OperatorArms` | Rigged first-person operator arms FBX + 2K PBR maps | Anomaly Hunter pack, rigged by `Tools/OperatorArms/rig_and_export_fbx_fixed.py` |
 
 ## Getting them into Unreal (once)
 
@@ -15,6 +16,7 @@ Everything in `Assets/` is made by code, so it's free to use and easy to regener
    - imports the audio to `/Game/Generated/Audio` (the hiss is set to loop)
    - imports the textures to `/Game/Generated/Textures` (normals/roughness set to linear)
    - builds materials in `/Game/Generated/Materials` (world-aligned ones for walls/floors, UV ones for weapons)
+   - imports the operator arms to `/Game/Generated/Operator` and gives them their six materials
    - builds `/Game/Maps/TestArena`: dark concrete warehouse, corridors, physics crates and barrels,
      a few dim coloured lights, bodycam post-process (locked exposure, grain, vignette, fringe),
      a player start and 4 enemies (2 smart, 2 basic)

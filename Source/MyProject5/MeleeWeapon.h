@@ -65,6 +65,17 @@ public:
 	/** Name shown on the HUD. */
 	const FString& GetDisplayName() const { return DisplayName; }
 
+	/**
+	 * Where a hand grips the handle (world space) and the handle axis (towards the head).
+	 * Returns false for the left hand on one-handed weapons.
+	 */
+	bool GetHandGrip(bool bRightHand, FVector& OutPos, FVector& OutAxis) const
+	{
+		OutAxis = GetActorForwardVector();
+		OutPos = GetActorLocation() + OutAxis * (bRightHand ? MainHandOffset : SecondHandOffset);
+		return bRightHand || bTwoHanded;
+	}
+
 	/** Fires on every contact. Hook camera shake, hit-stop, sparks, blood and audio here. */
 	UPROPERTY(BlueprintAssignable, Category = "Melee")
 	FOnMeleeImpact OnMeleeImpact;
@@ -87,6 +98,18 @@ protected:
 		const FLinearColor& Colour, const TCHAR* MaterialPath = nullptr);
 
 	void SetBladePoints(const FVector& Base, const FVector& Tip);
+
+	// ---------- Hands (operator arms) ----------
+	UPROPERTY(EditAnywhere, Category = "Melee|Hands")
+	bool bTwoHanded = true;
+
+	/** Right hand, cm up the handle from the grip origin. */
+	UPROPERTY(EditAnywhere, Category = "Melee|Hands")
+	float MainHandOffset = 12.f;
+
+	/** Left hand (two-handed weapons only). */
+	UPROPERTY(EditAnywhere, Category = "Melee|Hands")
+	float SecondHandOffset = 2.f;
 
 	// ---------- Look ----------
 	UPROPERTY(EditAnywhere, Category = "Melee|Look")

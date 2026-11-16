@@ -17,18 +17,20 @@
 - AMeleeWeapon - physics melee: spring-damper hand, mouse-steered guard, velocity-based damage
 - UMeleeCombatComponent - glue between pawn and melee weapon, holds the weapon list
 - AMeleePipe / AMeleeCrowbar / AMeleeMachete / AMeleeFireAxe (MeleeWeaponTypes) - built from engine shapes
+- UOperatorArmsComponent - PoseableMesh FP arms, two-bone IK + finger curl onto gun/melee grips (no anims)
 
 ## Assets
 - Assets/ holds generated WAVs/PNGs (Tools/generate_assets.py); Tools/ue_setup_project.py imports them
   to /Game/Generated, builds materials and /Game/Maps/TestArena. Code loads them by soft path and
   silently skips anything missing. See README_ASSETS.md.
+- Assets/OperatorArms holds the rigged Anomaly Hunter operator arms FBX + PBR maps (Tools/OperatorArms/README.md).
+  If they aren't imported, the pawn falls back to the old Mixamo ArmsMesh.
 
 ## Controls
 WASD move, Shift sprint, Ctrl crouch (slide while sprinting), Space jump, Q/E head tilt, Z/C lean,
 1 gun, 2 melee (press 2 again to cycle pipe/crowbar/machete/axe). Gun: LMB fire, RMB aim, R reload. Melee: hold RMB + move mouse to steer, LMB thrust.
 
 ## Still to do
-- Hand IK onto the melee weapon (arms currently hide with the gun)
 - Fear wobble + one/two-hand grip modes for melee
 - Surface-specific impact sounds (bReturnPhysicalMaterial is already on in the melee sweep)
 - NavMesh pathfinding (enemies use direct-line MoveTowards)

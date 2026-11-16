@@ -40,7 +40,9 @@ AGun::AGun()
     MeshComp->bCastDynamicShadow = false;
     MeshComp->CastShadow = false;
 
-    MeshComp->SetRelativeLocation(FVector(25.f, 4.f, -8.f));
+    // Held out at arm's length, BODYCAM-style. (Was 25,4,-8 for the old Mixamo arms; the operator
+    // arms are longer and that crushed both hands against the bottom of the screen.)
+    MeshComp->SetRelativeLocation(FVector(38.f, 9.f, -11.f));
     MeshComp->SetRelativeRotation(FRotator(0.f, 90.f, 0.f));
     MeshComp->SetRelativeScale3D(FVector(0.6f));
 
@@ -257,6 +259,26 @@ void AGun::ApplyFirstPersonOffset(const FVector& CameraLocalPosOffset, const FRo
     {
         SetActorTransform(EquippedCamera->GetComponentTransform() * CurrentRelativeTransform);
     }
+}
+
+bool AGun::GetHandTargets(FVector& OutRightGrip, FVector& OutLeftGrip, FVector& OutAxis) const
+{
+    if (!EquippedCamera || IsHidden())
+    {
+        return false;
+    }
+
+    // The gun's sway, as a rotation in camera space (current pose relative to its resting pose).
+    // Using the delta keeps GripOffset in an intuitive camera-aligned frame, independent of the
+    // mesh's baked-in 90 degree yaw.
+    const FQuat SwayDelta = CurrentRelativeTransform.GetRotation() * BaseRelativeTransform.GetRotation().Inverse();
+    const FVector Pivot = CurrentRelativeTransform.GetLocation();
+    const FTransform& Cam = EquippedCamera->GetComponentTransform();
+
+    OutRightGrip = Cam.TransformPosition(Pivot + SwayDelta.RotateVector(GripOffset));
+    OutLeftGrip  = Cam.TransformPosition(Pivot + SwayDelta.RotateVector(GripOffset + SupportHandOffset));
+    OutAxis      = Cam.TransformVectorNoScale(SwayDelta.RotateVector(GripAxis.GetSafeNormal(UE_SMALL_NUMBER, FVector::UpVector)));
+    return true;
 }
 
 FVector AGun::GetMuzzleAimPoint(float Distance) const
