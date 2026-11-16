@@ -55,8 +55,9 @@ bool UOperatorArmsComponent::InitOperatorArms()
 
 	bReady = true;
 	Source[0] = Source[1] = -1;
+	ResetDynamics();
 	SetVisibility(true);
-	UpdatePlacement();
+	UpdateBody(0.f);
 	return true;
 }
 
@@ -107,19 +108,22 @@ bool UOperatorArmsComponent::CalibrateRig()
 		FArmRig& A = Arms[Side];
 		auto Name = [X](const TCHAR* Base) { return FString::Printf(TEXT("%s_%s"), Base, X); };
 
+		A.Clav  = FName(*Name(TEXT("clavicle")));
 		A.Upper = FName(*Name(TEXT("upperarm")));
 		A.Lower = FName(*Name(TEXT("lowerarm")));
 		A.Twist = FName(*Name(TEXT("forearm_twist")));
 		A.Wrist = FName(*Name(TEXT("wrist")));
 		A.Hand  = FName(*Name(TEXT("hand")));
 
-		FTransform TU, TL, TT, TW, TH;
+		FTransform TC, TU, TL, TT, TW, TH;
+		Find(A.Clav.ToString(), TC);
 		Find(A.Upper.ToString(), TU);
 		Find(A.Lower.ToString(), TL);
 		Find(A.Twist.ToString(), TT);
 		Find(A.Wrist.ToString(), TW);
 		Find(A.Hand.ToString(), TH);
 
+		A.C0 = TC.GetLocation();  A.RClav  = TC.GetRotation();
 		A.S  = TU.GetLocation();  A.RUpper = TU.GetRotation();
 		A.E0 = TL.GetLocation();  A.RLower = TL.GetRotation();
 		A.M0 = TT.GetLocation();  A.RTwist = TT.GetRotation();
@@ -161,6 +165,7 @@ bool UOperatorArmsComponent::CalibrateRig()
 	MeshDown = -Up;
 	MeshBasis = FRotationMatrix::MakeFromXY(Fwd, Right).ToQuat();
 	ShoulderMid = (Arms[0].S + Arms[1].S) * 0.5f;
+	ShoulderHalfWidth = ShoulderWidth * 0.5f;
 
 	// The authored rig has 41 cm between shoulders. If the FBX came in metres (or 100x), fix it.
 	UnitFix = 41.f / ShoulderWidth;
@@ -207,14 +212,148 @@ bool UOperatorArmsComponent::CalibrateRig()
 	return true;
 }
 
-void UOperatorArmsComponent::UpdatePlacement()
+void UOperatorArmsComponent::ResetDynamics()
 {
-	// Component sits on the camera, rotated so the mesh faces the camera's forward, and
-	// offset so the shoulders land at ShoulderOffset. Recomputed every tick so it's live-tunable.
+	LagPos = LagPosVel = LagRot = LagRotVel = Lean = FVector::ZeroVector;
+	Torso = FVector2D::ZeroVector;
+	HandVel[0] = HandVel[1] = FVector::ZeroVector;
+	bHasPrevGrip[0] = bHasPrevGrip[1] = false;
+	bHasPrevCam = false;
+	MoveAlpha = 0.f;
+	LastAmmo = -1;
+}
+
+// ------------------------------------------------------------------ body
+
+void UOperatorArmsComponent::UpdateBody(float Dt)
+{
+	// The component hangs off the camera. Instead of welding the shoulders to it, the body is a
+	// spring: it trails the camera when you turn or move, bobs, breathes, turns towards the hands
+	// and leans to keep them in reach. The hands are IK'd afterwards, so they stay on the weapon.
 	const float Scale = ArmsScale * UnitFix;
-	const FQuat RelRot = MeshBasis.Inverse();
-	const FVector RelLoc = ShoulderOffset - RelRot.RotateVector(ShoulderMid * Scale);
-	SetRelativeTransform(FTransform(RelRot, RelLoc, FVector(Scale)));
+	const float L = Looseness;
+
+	const USceneComponent* Cam = GetAttachParent();
+	if (Cam && Dt > KINDA_SMALL_NUMBER)
+	{
+		const FVector CamPos = Cam->GetComponentLocation();
+		const FQuat CamQuat = Cam->GetComponentQuat();
+
+		FVector TargetPos = FVector::ZeroVector;   // cm
+		FVector TargetRot = FVector::ZeroVector;   // pitch, yaw, roll (degrees)
+		float PlanarSpeed = 0.f;
+
+		if (bHasPrevCam && FVector::DistSquared(CamPos, PrevCamPos) < FMath::Square(300.f))
+		{
+			// how the camera moved this frame, in its own frame
+			const FVector VelLocal = CamQuat.UnrotateVector((CamPos - PrevCamPos) / Dt);
+			const FRotator Turn = (PrevCamQuat.Inverse() * CamQuat).Rotator();
+			const float RateToLag = TurnLagSeconds / Dt;
+			const float MaxDeg = MaxTurnLagDegrees;
+
+			// trail behind: opposite to the motion
+			TargetPos = (VelLocal * -MoveLagSeconds).GetClampedToMaxSize(MaxMoveLagCm);
+			TargetRot.X = FMath::Clamp(-static_cast<float>(Turn.Pitch) * RateToLag, -MaxDeg, MaxDeg);
+			TargetRot.Y = FMath::Clamp(-static_cast<float>(Turn.Yaw) * RateToLag, -MaxDeg, MaxDeg);
+			TargetRot.Z = FMath::Clamp(-static_cast<float>(Turn.Roll) * RateToLag * 0.5f, -MaxDeg, MaxDeg);
+			PlanarSpeed = static_cast<float>(FVector2D(VelLocal.X, VelLocal.Y).Size());
+		}
+		else
+		{
+			// first frame, or a teleport/respawn: don't whip the arms across the screen
+			LagPos = LagPosVel = LagRot = LagRotVel = FVector::ZeroVector;
+		}
+		PrevCamPos = CamPos;
+		PrevCamQuat = CamQuat;
+		bHasPrevCam = true;
+
+		// Spring-damper towards the trailing target (sub-stepped so it's stable at low fps)
+		const float W = 2.f * UE_PI * BodySpringHz;
+		const float K = W * W;
+		const float C = 2.f * BodySpringDamping * W;
+		const int32 Steps = FMath::Clamp(FMath::CeilToInt(Dt / 0.012f), 1, 8);
+		const float H = Dt / static_cast<float>(Steps);
+		for (int32 Step = 0; Step < Steps; ++Step)
+		{
+			LagPosVel += ((TargetPos * L - LagPos) * K - LagPosVel * C) * H;
+			LagPos += LagPosVel * H;
+			LagRotVel += ((TargetRot * L - LagRot) * K - LagRotVel * C) * H;
+			LagRot += LagRotVel * H;
+		}
+		const float Slack = 2.f * FMath::Max(L, 1.f);
+		LagPos = LagPos.GetClampedToMaxSize(MaxMoveLagCm * Slack);
+		LagRot = LagRot.GetClampedToMaxSize(MaxTurnLagDegrees * Slack);
+
+		// Walk bob + breathing
+		MoveAlpha = FMath::FInterpTo(MoveAlpha, FMath::Clamp(PlanarSpeed / 600.f, 0.f, 1.f), Dt, 8.f);
+		if (MoveAlpha > 0.02f)
+		{
+			BobPhase = FMath::Fmod(BobPhase + Dt * 10.f, 4.f * UE_PI);
+		}
+		BreathTime += Dt;
+
+		// Torso turns towards where the hands are, so a wind-up uses the whole body
+		FVector Mid = FVector::ZeroVector;
+		int32 Count = 0;
+		for (int32 i = 0; i < 2; ++i)
+		{
+			if (Source[i] > 0)
+			{
+				Mid += Out[i].Grip;
+				++Count;
+			}
+		}
+		FVector2D TorsoTarget = FVector2D::ZeroVector;
+		if (Count > 0)
+		{
+			const FVector D = Mid / static_cast<float>(Count) - ShoulderOffset;
+			const float Follow = FMath::Min(TorsoFollow * L, 0.9f);
+			const float Yaw = static_cast<float>(FMath::RadiansToDegrees(FMath::Atan2(D.Y, FMath::Max(D.X, 1.0))));
+			const float Pitch = static_cast<float>(FMath::RadiansToDegrees(FMath::Atan2(D.Z, FMath::Max(D.Size2D(), 1.0))));
+			TorsoTarget.X = FMath::Clamp(Pitch * Follow * 0.5f, -MaxTorsoDegrees * 0.5f, MaxTorsoDegrees * 0.5f);
+			TorsoTarget.Y = FMath::Clamp(Yaw * Follow, -MaxTorsoDegrees, MaxTorsoDegrees);
+		}
+		Torso = FMath::Vector2DInterpTo(Torso, TorsoTarget, Dt, 14.f);
+
+		// Lean in when a hand gets further than a comfortable reach: keeps the elbows bent
+		// (straight, locked-out arms are what reads as "stiff") and the hands on the weapon
+		FVector LeanTarget = FVector::ZeroVector;
+		if (bLeanToReach)
+		{
+			for (int32 i = 0; i < 2; ++i)
+			{
+				if (Source[i] <= 0)
+				{
+					continue;
+				}
+				const FArmRig& A = Arms[i];
+				const FVector GripRest = FMath::Lerp(A.H0, A.Mid1, GripAlong) + MeshDown * (GripPalmDepth * A.PalmLen);
+				const float HandLen = 0.8f * static_cast<float>((GripRest - A.W0).Size()) * Scale;
+				const float Reach = ComfortReach * (A.L1 + A.L2) * Scale;
+				const FVector ShoulderCam = ShoulderOffset + FVector(0.f, (i == 0 ? 1.f : -1.f) * ShoulderHalfWidth * Scale, 0.f);
+				const FVector ToGrip = Out[i].Grip - ShoulderCam;
+				const float Over = static_cast<float>(ToGrip.Size()) - HandLen - Reach;
+				if (Over > 0.f)
+				{
+					LeanTarget += ToGrip.GetSafeNormal() * Over;
+				}
+			}
+		}
+		Lean = FMath::VInterpTo(Lean, LeanTarget, Dt, 25.f);
+	}
+
+	const float BobAmount = MoveAlpha * L;
+	FVector Bob(0.f,
+		FMath::Sin(BobPhase * 0.5f) * BobSwayCm * BobAmount,
+		FMath::Sin(BobPhase) * BobHeightCm * BobAmount);
+	Bob.Z += FMath::Sin(BreathTime * 1.5f) * BreathCm * L;
+	const float BobRoll = FMath::Sin(BobPhase * 0.5f) * BobRollDegrees * BobAmount;
+
+	// Rotate about the point between the shoulders, which sits at ShoulderOffset (+ all the offsets)
+	const FQuat BodyQ = FRotator(LagRot.X + Torso.X, LagRot.Y + Torso.Y, LagRot.Z + BobRoll).Quaternion();
+	const FQuat RelRot = BodyQ * MeshBasis.Inverse();
+	const FVector Pivot = ShoulderOffset + LagPos + Bob + Lean;
+	SetRelativeTransform(FTransform(RelRot, Pivot - RelRot.RotateVector(ShoulderMid * Scale), FVector(Scale)));
 }
 
 // ------------------------------------------------------------------ targets
@@ -263,7 +402,19 @@ void UOperatorArmsComponent::GatherTargets(FHandTarget OutTargets[2], int32 OutS
 		if (G->GetHandTargets(R, L, Axis))
 		{
 			const FVector AxisCam = ToCamDir(Axis);
-			OutTargets[0] = { ToCam(R), AxisCam, 1.f, TriggerFingerCurl };
+
+			// index finger rests on the trigger and squeezes for a moment on each pull
+			float IndexCurl = TriggerFingerCurl;
+			if (const UWorld* World = GetWorld())
+			{
+				const float Since = static_cast<float>(World->GetTimeSeconds()) - G->GetLastFireTime();
+				if (Since >= 0.f && Since < 0.15f)
+				{
+					IndexCurl = FMath::Lerp(TriggerPullCurl, TriggerFingerCurl, Since / 0.15f);
+				}
+			}
+
+			OutTargets[0] = { ToCam(R), AxisCam, 1.f, IndexCurl };
 			OutTargets[1] = { ToCam(L), AxisCam, 1.f, 1.f };
 			OutSources[0] = OutSources[1] = 2;
 		}
@@ -281,7 +432,7 @@ void UOperatorArmsComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 		return;
 	}
 
-	UpdatePlacement();
+	const float Dt = FMath::Min(DeltaTime, 0.1f);
 
 	FHandTarget Targets[2];
 	int32 Sources[2];
@@ -303,7 +454,7 @@ void UOperatorArmsComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 			Blend[i] = 0.f;
 			Source[i] = Sources[i];
 		}
-		Blend[i] = FMath::Min(1.f, Blend[i] + DeltaTime / SwitchBlendTime);
+		Blend[i] = FMath::Min(1.f, Blend[i] + Dt / SwitchBlendTime);
 		if (Blend[i] >= 1.f)
 		{
 			Out[i] = Targets[i];
@@ -318,6 +469,31 @@ void UOperatorArmsComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 		}
 	}
 
+	// How fast each hand is moving (camera space) - drives elbow drag and grip tightness
+	for (int32 i = 0; i < 2; ++i)
+	{
+		if (bHasPrevGrip[i] && Dt > KINDA_SMALL_NUMBER)
+		{
+			HandVel[i] = FMath::VInterpTo(HandVel[i], (Out[i].Grip - PrevGrip[i]) / Dt, Dt, 10.f);
+		}
+		PrevGrip[i] = Out[i].Grip;
+		bHasPrevGrip[i] = true;
+	}
+
+	// A shot jolts the shoulders back and up
+	if (const AGun* G = Gun.Get())
+	{
+		const int32 Ammo = G->GetAmmoInMag();
+		if (LastAmmo >= 0 && Ammo < LastAmmo && Source[0] == 2)
+		{
+			LagPosVel.X -= RecoilKick * Looseness;
+			LagRotVel.X += RecoilKick * 2.5f * Looseness;
+		}
+		LastAmmo = Ammo;
+	}
+
+	UpdateBody(Dt);
+
 	// camera space -> component space, then solve
 	const FTransform Rel = GetRelativeTransform();
 	for (int32 i = 0; i < 2; ++i)
@@ -325,7 +501,10 @@ void UOperatorArmsComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 		FHandTarget T = Out[i];
 		T.Grip = Rel.InverseTransformPosition(Out[i].Grip);
 		T.Axis = Rel.GetRotation().UnrotateVector(Out[i].Axis);
-		SolveArm(Arms[i], i == 0, T);
+
+		const FVector ElbowExtra = (HandVel[i] * (-ElbowDrag * Looseness)).GetClampedToMaxSize(0.6f);
+		const float Squeeze = FMath::Clamp(static_cast<float>(HandVel[i].Size()) / 300.f, 0.f, 1.f);
+		SolveArm(Arms[i], i == 0, T, ElbowExtra, Squeeze);
 	}
 
 	RefreshBoneTransforms();
@@ -333,13 +512,27 @@ void UOperatorArmsComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 
 // ------------------------------------------------------------------ IK
 
-void UOperatorArmsComponent::SolveArm(const FArmRig& A, bool bRight, const FHandTarget& T)
+void UOperatorArmsComponent::SolveArm(const FArmRig& A, bool bRight, const FHandTarget& T, const FVector& ElbowExtraCam, float Squeeze)
 {
 	const FVector MeshFwd = MeshBasis.GetAxisX();
 	const FVector Axis = T.Axis.GetSafeNormal(UE_SMALL_NUMBER, -MeshDown);
 
+	// 0. Shoulder: the clavicle swings so the shoulder follows the hand a little
+	const FVector ClavRest = A.S - A.C0;
+	const FVector Neutral = A.S + MeshFwd * (0.7f * (A.L1 + A.L2));
+	const FVector Shift = ((T.Grip - Neutral) * FMath::Min(ShoulderFollow * Looseness, 0.6f))
+		.GetClampedToMaxSize(MaxShoulderShift * A.L1);
+	FQuat QClav = FQuat::Identity;
+	FVector S = A.S;
+	if (!Shift.IsNearlyZero() && ClavRest.SizeSquared() > KINDA_SMALL_NUMBER)
+	{
+		QClav = FQuat::FindBetweenVectors(ClavRest, A.S + Shift - A.C0);
+		S = A.C0 + QClav.RotateVector(ClavRest);   // clavicle keeps its length
+	}
+	SetBoneRotationCS(A.Clav, QClav * A.RClav);
+
 	// 1. Hand orientation: index->pinky runs down the handle, knuckles roughly along the arm
-	const FVector Hint = (T.Grip - A.S).GetSafeNormal(UE_SMALL_NUMBER, MeshFwd);
+	const FVector Hint = (T.Grip - S).GetSafeNormal(UE_SMALL_NUMBER, MeshFwd);
 	FVector HandFwd = Hint - Axis * FVector::DotProduct(Hint, Axis);
 	if (!HandFwd.Normalize())
 	{
@@ -351,30 +544,32 @@ void UOperatorArmsComponent::SolveArm(const FArmRig& A, bool bRight, const FHand
 	const FVector GripRest = FMath::Lerp(A.H0, A.Mid1, GripAlong) + MeshDown * (GripPalmDepth * A.PalmLen);
 	FVector Wrist = T.Grip - QHand.RotateVector(GripRest - A.W0);
 
-	// 3. Two-bone IK, shoulder fixed
-	const FVector ToWrist = Wrist - A.S;
+	// 3. Two-bone IK from the (moved) shoulder
+	const FVector ToWrist = Wrist - S;
 	float Dist = ToWrist.Size();
 	const FVector Dir = (Dist > KINDA_SMALL_NUMBER) ? ToWrist / Dist : MeshFwd;
 	Dist = FMath::Clamp(Dist, FMath::Abs(A.L1 - A.L2) + 0.01f * A.L1, (A.L1 + A.L2) * 0.999f);
-	Wrist = A.S + Dir * Dist;
+	Wrist = S + Dir * Dist;
 
 	const float Along = (A.L1 * A.L1 - A.L2 * A.L2 + Dist * Dist) / (2.f * Dist);
 	const float Height = FMath::Sqrt(FMath::Max(A.L1 * A.L1 - Along * Along, 0.f));
 
-	FVector PoleCam = ElbowPole;
+	// Elbow points down-and-out, and drags behind a fast-moving hand
+	FVector PoleCam = ElbowPole.GetSafeNormal(UE_SMALL_NUMBER, FVector(0.f, 0.f, -1.f));
 	if (!bRight)
 	{
 		PoleCam.Y = -PoleCam.Y;
 	}
-	const FVector Pole = GetRelativeTransform().GetRotation().UnrotateVector(PoleCam.GetSafeNormal());
+	PoleCam += ElbowExtraCam;
+	const FVector Pole = GetRelativeTransform().GetRotation().UnrotateVector(PoleCam.GetSafeNormal(UE_SMALL_NUMBER, FVector(0.f, 0.f, -1.f)));
 	FVector PoleDir = Pole - Dir * FVector::DotProduct(Pole, Dir);
 	if (!PoleDir.Normalize())
 	{
 		PoleDir = MeshDown;
 	}
-	const FVector Elbow = A.S + Dir * Along + PoleDir * Height;
+	const FVector Elbow = S + Dir * Along + PoleDir * Height;
 
-	const FQuat QUpper = FQuat::FindBetweenVectors(A.E0 - A.S, Elbow - A.S);
+	const FQuat QUpper = FQuat::FindBetweenVectors(A.E0 - A.S, Elbow - S);
 	const FQuat QFore = FQuat::FindBetweenVectors(A.W0 - A.E0, Wrist - Elbow);
 
 	// Share the hand's roll with the forearm twist bone
@@ -388,10 +583,19 @@ void UOperatorArmsComponent::SolveArm(const FArmRig& A, bool bRight, const FHand
 	SetBoneRotationCS(A.Wrist, QHand * A.RWrist);
 	SetBoneRotationCS(A.Hand, QHand * A.RHand);
 
-	// 4. Curl fingers (planar chain about one axis per digit), thumb opposes towards the palm
+	// 4. Curl fingers (planar chain about one axis per digit), thumb opposes towards the palm.
+	//    A holding hand relaxes slightly when still and clamps down as it speeds up; every
+	//    finger also drifts a touch so the hand never looks frozen.
+	const float Relax = FMath::Min(GripSqueeze * Looseness, 0.35f) * (1.f - Squeeze);
 	for (int32 d = 0; d < NumDigits; ++d)
 	{
-		const float Curl = (d == Index) ? T.IndexCurl : T.Curl;
+		float Curl = (d == Index) ? T.IndexCurl : T.Curl;
+		if (T.Curl > 0.5f)
+		{
+			Curl *= 1.f - Relax;
+		}
+		Curl += FMath::Sin(BreathTime * 1.3f + static_cast<float>(d) * 1.7f + (bRight ? 0.f : 0.9f)) * 0.02f * Looseness;
+		Curl = FMath::Clamp(Curl, 0.f, 1.1f);
 		const float DigitScale = (d == Thumb) ? ThumbCurlScale : 1.f;
 		float Cumulative = 0.f;
 		for (int32 j = 0; j < 3; ++j)

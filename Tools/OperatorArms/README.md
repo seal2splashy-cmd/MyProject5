@@ -46,6 +46,20 @@ Every frame `UOperatorArmsComponent`:
 Because the melee grip *is* the physics-simulated hand position, the arms swing with the weapon.
 Switching weapons blends each hand to its new grip over 0.2 s.
 
+## Looseness
+
+The hands always land exactly on the weapon; everything behind them moves with inertia:
+
+- the body (shoulders/torso) is a spring that trails the camera when you turn or move
+- walk bob and breathing
+- the torso turns towards the hands, so a wind-up uses the whole body
+- the body leans in past `ComfortReach`, keeping elbows bent instead of locked straight
+- each shoulder follows its hand a little (clavicle), the elbow drags behind fast hand movement
+- fingers relax when still, tighten when swinging; trigger finger squeezes on each shot; shots jolt the shoulders
+
+`Looseness` scales all of it: 0 = welded to the camera, 1 = default, 2 = floppy.
+`BodySpringHz` (lower = heavier) and `BodySpringDamping` (lower = more wobble) set the character.
+
 ## Tuning (select the pawn in PIE, OperatorArms component)
 
 - `ArmsScale`, `ShoulderOffset` - size and where the shoulders sit relative to the camera

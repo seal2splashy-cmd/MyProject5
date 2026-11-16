@@ -28,6 +28,9 @@ public:
     int32 GetAmmoInMag() const { return AmmoInMag; }
     int32 GetReserveAmmo() const { return ReserveAmmo; }
 
+    /** World time of the last trigger pull (shot or dry fire). Used for the trigger-finger squeeze. */
+    float GetLastFireTime() const { return LastFireTime; }
+
     void EquipToCamera(UCameraComponent* Camera, const FTransform& RelativeTransform = FTransform::Identity);
     void ApplyFirstPersonOffset(const FVector& CameraLocalPosOffset, const FRotator& CameraLocalRotOffset);
 
