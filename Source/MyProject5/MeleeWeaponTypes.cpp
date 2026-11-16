@@ -59,7 +59,7 @@ AMeleeCrowbar::AMeleeCrowbar()
 	DisplayName = TEXT("Crowbar");
 
 	SetMainPart(false, FVector(37.5f, 0.f, 0.f), AlongX, Rod(75.f, 2.6f), DarkSteel, RustMat);
-	AddPart(TEXT("Grip"), false, FVector(8.f, 0.f, 0.f), AlongX, Rod(16.f, 3.2f), Rubber);
+	AddPart(TEXT("GripWrap"), false, FVector(8.f, 0.f, 0.f), AlongX, Rod(16.f, 3.2f), Rubber);
 	// Hook: 14 cm, angled 60 degrees up from the shaft towards +Z
 	// (cylinder axis = (-sin p, 0, cos p); p = -30 gives (0.5, 0, 0.87))
 	AddPart(TEXT("Hook"), false, FVector(78.5f, 0.f, 6.f), FRotator(-30.f, 0.f, 0.f), Rod(14.f, 2.6f), DarkSteel, RustMat);

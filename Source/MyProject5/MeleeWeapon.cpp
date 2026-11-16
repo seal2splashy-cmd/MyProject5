@@ -69,7 +69,10 @@ AMeleeWeapon::AMeleeWeapon()
 UStaticMeshComponent* AMeleeWeapon::AddPart(FName Name, bool bCube, const FVector& Loc, const FRotator& Rot,
 	const FVector& Scale, const FLinearColor& Colour, const TCHAR* MaterialPath)
 {
-	UStaticMeshComponent* Part = CreateDefaultSubobject<UStaticMeshComponent>(Name);
+	// Prefix so a part can never collide with the base components (Grip, Mesh, BladeBase, BladeTip) -
+	// two subobjects with the same name is a fatal error at startup.
+	const FName PartName(*FString::Printf(TEXT("Part_%s"), *Name.ToString()));
+	UStaticMeshComponent* Part = CreateDefaultSubobject<UStaticMeshComponent>(PartName);
 	Part->SetupAttachment(Root);
 	Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Part->SetGenerateOverlapEvents(false);
