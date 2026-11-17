@@ -527,6 +527,11 @@ def main():
         task.enter_progress_frame(1, "Building TestArena")
         build_level(mats)
         task.enter_progress_frame(1, "Done")
+    # Bodycam lens material + torch click (separate script so it can be run on its own too)
+    fx_script = os.path.join(PROJECT_DIR, "Tools", "build_bodycam_fx_ue58.py")
+    if os.path.isfile(fx_script):
+        import runpy
+        runpy.run_path(fx_script, run_name="__main__")
     log("All done - press Play in /Game/Maps/TestArena")
 
 

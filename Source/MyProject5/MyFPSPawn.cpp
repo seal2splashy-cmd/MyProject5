@@ -19,6 +19,8 @@
 #include "Components/AudioComponent.h"
 #include "MeleeWeapon.h"
 #include "OperatorArmsComponent.h"
+#include "BodycamLensComponent.h"
+#include "BodycamTorchComponent.h"
 
 AMyFPSPawn::AMyFPSPawn()
 {
@@ -63,6 +65,11 @@ AMyFPSPawn::AMyFPSPawn()
     // Physics melee
     Melee = CreateDefaultSubobject<UMeleeCombatComponent>(TEXT("Melee"));
 
+    // Bodycam lens look (post-process on the camera) and chest torch
+    BodycamLens = CreateDefaultSubobject<UBodycamLensComponent>(TEXT("BodycamLens"));
+    Torch = CreateDefaultSubobject<UBodycamTorchComponent>(TEXT("Torch"));
+    Torch->SetupAttachment(CameraComponent);
+
     // Generated audio
     auto Snd = [](const TCHAR* Name)
     {
@@ -101,6 +108,7 @@ void AMyFPSPawn::BeginPlay()
         PreviousControlYaw = PC->GetControlRotation().Yaw;
     }
     CameraComponent->SetFieldOfView(BaseFOV);
+    BodycamLens->InitLens(CameraComponent);
 
     if (GunClass)
     {
@@ -558,6 +566,17 @@ void AMyFPSPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent
     // Weapon slots
     PlayerInputComponent->BindKey(EKeys::One, IE_Pressed, this, &AMyFPSPawn::EquipGun);
     PlayerInputComponent->BindKey(EKeys::Two, IE_Pressed, this, &AMyFPSPawn::EquipMelee);
+
+    // Chest torch
+    PlayerInputComponent->BindKey(EKeys::F, IE_Pressed, this, &AMyFPSPawn::ToggleTorch);
+}
+
+void AMyFPSPawn::ToggleTorch()
+{
+    if (!bIsDead && Torch)
+    {
+        Torch->Toggle();
+    }
 }
 
 void AMyFPSPawn::MoveForward(float Value) { MovementInput.X = bIsDead ? 0.f : FMath::Clamp(Value, -1.f, 1.f); }

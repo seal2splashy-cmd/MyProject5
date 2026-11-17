@@ -46,5 +46,6 @@ private:
     void DrawCrosshairAt(float ScreenX, float ScreenY);
     void DrawHealthBar(float Health, float MaxHealth);
     void DrawStaminaBar(float Stamina, float MaxStamina);
+    void DrawTorchBattery(float Battery01, bool bTorchOn, bool bLow);
     void DrawDeathScreen(float TimeSinceDeath);
 };

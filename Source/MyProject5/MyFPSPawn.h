@@ -11,6 +11,8 @@ class USkeletalMesh;
 class UAnimationAsset;
 class UMeleeCombatComponent;
 class UOperatorArmsComponent;
+class UBodycamLensComponent;
+class UBodycamTorchComponent;
 class UAudioComponent;
 class USoundBase;
 class AGun;
@@ -24,6 +26,8 @@ public:
     AMyFPSPawn();
 
     AGun* GetCurrentGun() const { return CurrentGun; }
+    UBodycamTorchComponent* GetTorch() const { return Torch; }
+    UBodycamLensComponent* GetBodycamLens() const { return BodycamLens; }
 
     // HUD accessors
     float GetHealth() const     { return CurrentHealth; }
@@ -104,6 +108,15 @@ private:
 
     UPROPERTY(VisibleAnywhere, Category = "Melee")
     UMeleeCombatComponent* Melee;
+
+    // Bodycam look: lens post-process on the camera + chest torch (F)
+    UPROPERTY(VisibleAnywhere, Category = "Bodycam")
+    UBodycamLensComponent* BodycamLens;
+
+    UPROPERTY(VisibleAnywhere, Category = "Bodycam")
+    UBodycamTorchComponent* Torch;
+
+    void ToggleTorch();
 
     uint64 LastFireFrame = 0;
 

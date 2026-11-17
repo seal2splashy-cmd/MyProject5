@@ -1,6 +1,8 @@
 #include "MyHUD.h"
 #include "MyFPSPawn.h"
 #include "AGun.h"
+#include "BodycamTorchComponent.h"
+#include "BodycamLensComponent.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Engine/Font.h"
@@ -46,6 +48,11 @@ void AMyHUD::DrawHUD()
                     FVector2D ScreenPos;
                     if (PC->ProjectWorldLocationToScreen(AimWorldPoint, ScreenPos, true))
                     {
+                        // Follow the bodycam lens warp so the crosshair sits on what the gun points at
+                        if (const UBodycamLensComponent* Lens = FPSPawn->GetBodycamLens())
+                        {
+                            ScreenPos = Lens->DistortScreenPoint(ScreenPos, FVector2D(Canvas->SizeX, Canvas->SizeY));
+                        }
                         ScreenX = ScreenPos.X;
                         ScreenY = ScreenPos.Y;
                     }
@@ -61,6 +68,10 @@ void AMyHUD::DrawHUD()
 
             DrawHealthBar(FPSPawn->GetHealth(), FPSPawn->GetMaxHealth());
             DrawStaminaBar(FPSPawn->GetStamina(), FPSPawn->GetMaxStamina());
+            if (const UBodycamTorchComponent* Torch = FPSPawn->GetTorch())
+            {
+                DrawTorchBattery(Torch->GetBattery01(), Torch->IsTorchOn(), Torch->IsBatteryLow());
+            }
         }
     }
 
@@ -126,6 +137,32 @@ void AMyHUD::DrawStaminaBar(float Stamina, float MaxStamina)
 
     DrawRect(FLinearColor(0.1f, 0.1f, 0.1f, 0.5f), X, Y, BarW, BarH);
     DrawRect(FLinearColor(0.2f, 0.5f, 1.f, 0.85f), X, Y, BarW * Pct, BarH);
+}
+
+void AMyHUD::DrawTorchBattery(float Battery01, bool bTorchOn, bool bLow)
+{
+    // Thin amber bar under stamina; hidden while full and off so the HUD stays clean.
+    if (!bTorchOn && Battery01 >= 0.999f)
+    {
+        return;
+    }
+
+    const float Pct = FMath::Clamp(Battery01, 0.f, 1.f);
+    const float BarW = 240.f;
+    const float BarH = 4.f;
+    const float X = 40.f;
+    const float Y = Canvas->SizeY - 28.f;
+
+    FLinearColor Fill(1.f, 0.72f, 0.2f, bTorchOn ? 0.85f : 0.45f);
+    if (bLow)
+    {
+        // Blink red when low
+        const bool bBlink = FMath::Fmod(GetWorld()->GetTimeSeconds(), 0.8) < 0.4;
+        Fill = FLinearColor(0.95f, 0.15f, 0.1f, bBlink ? 0.9f : 0.35f);
+    }
+
+    DrawRect(FLinearColor(0.1f, 0.1f, 0.1f, 0.5f), X, Y, BarW, BarH);
+    DrawRect(Fill, X, Y, BarW * Pct, BarH);
 }
 
 void AMyHUD::DrawDeathScreen(float TimeSinceDeath)

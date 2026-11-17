@@ -153,6 +153,17 @@ def click(seconds=0.12, hz=3500, tau=0.004):
     return x
 
 
+def torch_click():
+    """Tail-cap switch: a sharp press and a softer release ~55 ms later, plastic body."""
+    x = pad_to(click(0.05, 4600, 0.0025), 0.16)
+    rel = click(0.05, 3100, 0.0035) * 0.55
+    at = int(SR * 0.055)
+    x[at:at + len(rel)] += rel
+    t = t_axis(0.16)
+    x += np.sin(2 * np.pi * 180 * t) * np.exp(-t / 0.012) * 0.12   # body thump
+    return x
+
+
 def reload_sound():
     seconds = 1.1
     out = np.zeros(int(SR * seconds))
@@ -224,6 +235,7 @@ def build_audio():
     save_wav("SW_Gun_Shot", gunshot())
     save_wav("SW_Gun_DryFire", click(0.15, 2800, 0.006))
     save_wav("SW_Gun_Reload", reload_sound())
+    save_wav("SW_Torch_Click", torch_click(), peak=0.6)
     for v in range(4):
         save_wav(f"SW_Footstep_Concrete_0{v + 1}", footstep(v))
     save_wav("SW_Player_Hurt", player_hurt())

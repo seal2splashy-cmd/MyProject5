@@ -18,6 +18,10 @@
 - UMeleeCombatComponent - glue between pawn and melee weapon, holds the weapon list
 - AMeleePipe / AMeleeCrowbar / AMeleeMachete / AMeleeFireAxe (MeleeWeaponTypes) - built from engine shapes
 - UOperatorArmsComponent - PoseableMesh FP arms, two-bone IK + finger curl onto gun/melee grips (no anims)
+- UBodycamLensComponent - camera post-process bodycam look (barrel distortion via M_BodycamLens, fringing,
+  grain, vignette, flat colour, slow exposure) + SetInterference(0..1) hook, not driven by anything yet
+- UBodycamTorchComponent - chest spot light on the camera: lagged aim, shimmer, battery with low-battery stutter
+  (Docs/BODYCAM_FX.md)
 
 ## Assets
 - Assets/ holds generated WAVs/PNGs (Tools/generate_assets.py); Tools/ue_setup_project.py imports them
@@ -29,6 +33,7 @@
 ## Controls
 WASD move, Shift sprint, Ctrl crouch (slide while sprinting), Space jump, Q/E head tilt, Z/C lean,
 1 gun, 2 melee (press 2 again to cycle pipe/crowbar/machete/axe). Gun: LMB fire, RMB aim, R reload. Melee: hold RMB + move mouse to steer, LMB thrust.
+F torch.
 
 ## Still to do
 - Fear wobble + one/two-hand grip modes for melee
