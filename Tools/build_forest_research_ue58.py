@@ -269,6 +269,18 @@ def build():
             mesh("FR_FencePost_%d_%d"%(x,y),(x,y,95),(14,14,190),"metal")
         mesh("FR_FenceTop_%d"%y,(-980,y,185),(1780,12,15),"metal")
         mesh("FR_FenceBottom_%d"%y,(-980,y,35),(1780,12,12),"metal")
+    # Optional static, nonblocking anomaly preview. Import the OBJ first.
+    preview=lib.load_asset("/Game/Characters/ForestAnomaly/SK_AH_ForestAnomaly_Preview")
+    if preview and preview.get_class().get_name()=="StaticMesh":
+        specimen=actor(unreal.StaticMeshActor,"FR_Anomaly_VisualOnly",
+                       (3500,650,0),(0,180,0))
+        if specimen:
+            component=specimen.static_mesh_component
+            component.set_static_mesh(preview)
+            component.set_collision_enabled(unreal.CollisionEnabled.NO_COLLISION)
+            log("Added visual-only anomaly, no AI, to the server area.")
+    else:
+        log("No anomaly preview imported yet; forest map will still be complete.")
     # Safe initial spawn. Existing C++ GameMode selects AMyFPSPawn.
     actor(unreal.PlayerStart,"FR_PlayerStart",(-1650,0,102),(0,0,0))
     # Editor convenience: no enemy is spawned until the new model is tested.
