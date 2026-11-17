@@ -1,6 +1,8 @@
 #include "AGun.h"
 #include "ABullet.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
+#include "UObject/SoftObjectPath.h"
 #include "Components/SceneComponent.h"
 #include "UObject/ConstructorHelpers.h"
 #include "TimerManager.h"
