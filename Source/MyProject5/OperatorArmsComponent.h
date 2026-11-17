@@ -65,40 +65,40 @@ public:
 	/** THE knob. 0 = rigid (arms welded to the camera), 1 = default, 2 = very floppy.
 	 *  Scales everything in this section at once. */
 	UPROPERTY(EditAnywhere, Category = "Operator Arms|Looseness", meta = (ClampMin = 0, ClampMax = 3))
-	float Looseness = 1.f;
+	float Looseness = 0.75f;
 
 	/** How fast the body catches up with the camera (Hz). Lower = heavier, lazier arms. */
 	UPROPERTY(EditAnywhere, Category = "Operator Arms|Looseness", meta = (ClampMin = 0.5, ClampMax = 8))
-	float BodySpringHz = 2.6f;
+	float BodySpringHz = 3.5f;
 
 	/** 1 = settles with no overshoot, lower = wobbles past and back. */
 	UPROPERTY(EditAnywhere, Category = "Operator Arms|Looseness", meta = (ClampMin = 0.15, ClampMax = 1.5))
-	float BodySpringDamping = 0.5f;
+	float BodySpringDamping = 1.05f;
 
 	/** Seconds the shoulders trail behind when you turn the camera. */
 	UPROPERTY(EditAnywhere, Category = "Operator Arms|Looseness")
-	float TurnLagSeconds = 0.05f;
+	float TurnLagSeconds = 0.025f;
 
 	UPROPERTY(EditAnywhere, Category = "Operator Arms|Looseness")
-	float MaxTurnLagDegrees = 12.f;
+	float MaxTurnLagDegrees = 7.f;
 
 	/** Seconds the shoulders trail behind when you move. */
 	UPROPERTY(EditAnywhere, Category = "Operator Arms|Looseness")
-	float MoveLagSeconds = 0.004f;
+	float MoveLagSeconds = 0.002f;
 
 	UPROPERTY(EditAnywhere, Category = "Operator Arms|Looseness")
-	float MaxMoveLagCm = 6.f;
+	float MaxMoveLagCm = 3.f;
 
 	/** How much the torso turns towards where the hands are (0..1). Makes wind-ups use the whole body. */
 	UPROPERTY(EditAnywhere, Category = "Operator Arms|Looseness", meta = (ClampMin = 0, ClampMax = 1))
-	float TorsoFollow = 0.4f;
+	float TorsoFollow = 0.25f;
 
 	UPROPERTY(EditAnywhere, Category = "Operator Arms|Looseness")
-	float MaxTorsoDegrees = 28.f;
+	float MaxTorsoDegrees = 18.f;
 
 	/** How much each shoulder moves towards its hand (0..1). */
 	UPROPERTY(EditAnywhere, Category = "Operator Arms|Looseness", meta = (ClampMin = 0, ClampMax = 1))
-	float ShoulderFollow = 0.18f;
+	float ShoulderFollow = 0.12f;
 
 	/** Limit on that shoulder movement, as a fraction of the upper-arm length. */
 	UPROPERTY(EditAnywhere, Category = "Operator Arms|Looseness", meta = (ClampMin = 0, ClampMax = 0.5))
@@ -106,19 +106,19 @@ public:
 
 	/** How much the elbow swings out behind a fast-moving hand. */
 	UPROPERTY(EditAnywhere, Category = "Operator Arms|Looseness")
-	float ElbowDrag = 0.003f;
+	float ElbowDrag = 0.0015f;
 
 	UPROPERTY(EditAnywhere, Category = "Operator Arms|Looseness")
-	float BobHeightCm = 1.4f;
+	float BobHeightCm = 0.8f;
 
 	UPROPERTY(EditAnywhere, Category = "Operator Arms|Looseness")
-	float BobSwayCm = 1.2f;
+	float BobSwayCm = 0.6f;
 
 	UPROPERTY(EditAnywhere, Category = "Operator Arms|Looseness")
-	float BobRollDegrees = 2.f;
+	float BobRollDegrees = 0.9f;
 
 	UPROPERTY(EditAnywhere, Category = "Operator Arms|Looseness")
-	float BreathCm = 0.5f;
+	float BreathCm = 0.3f;
 
 	/** How much the fingers relax when the hand is still (they tighten as it speeds up). */
 	UPROPERTY(EditAnywhere, Category = "Operator Arms|Looseness", meta = (ClampMin = 0, ClampMax = 0.35))
@@ -136,7 +136,7 @@ public:
 	/** Fraction of full arm length the arms are happy to extend to (1 = dead straight).
 	 *  Lower = more bent, relaxed elbows. */
 	UPROPERTY(EditAnywhere, Category = "Operator Arms|Looseness", meta = (ClampMin = 0.5, ClampMax = 1))
-	float ComfortReach = 0.82f;
+	float ComfortReach = 0.78f;
 
 	// ---------------- Grip shape ----------------
 	/** How far from the wrist to the knuckles the fist centre is (0..1 of palm length). */

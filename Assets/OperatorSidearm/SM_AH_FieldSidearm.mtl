@@ -1,0 +1,45 @@
+# Nonfunctional stylised game prop materials
+newmtl Chassis
+Ka 0.02 0.03 0.04
+Kd 0.13 0.17 0.19
+Ks 0.20 0.22 0.24
+Ns 160
+
+newmtl Frame
+Ka 0.05 0.05 0.05
+Kd 0.34 0.40 0.44
+Ks 0.25 0.28 0.32
+Ns 200
+
+newmtl Grip
+Ka 0.01 0.01 0.01
+Kd 0.06 0.08 0.09
+Ks 0.03 0.03 0.03
+Ns 30
+
+newmtl Ceramic
+Ka 0.07 0.07 0.07
+Kd 0.72 0.77 0.78
+Ks 0.13 0.13 0.13
+Ns 90
+
+newmtl Cyan
+Ka 0.04 0.30 0.30
+Kd 0.02 0.78 0.86
+Ke 0.04 0.42 0.47
+Ks 0.10 0.20 0.20
+Ns 140
+
+newmtl Amber
+Ka 0.20 0.10 0.01
+Kd 0.95 0.50 0.12
+Ke 0.15 0.08 0.01
+Ks 0.08 0.08 0.08
+Ns 80
+
+newmtl Screen
+Ka 0.00 0.10 0.12
+Kd 0.03 0.20 0.25
+Ke 0.01 0.10 0.13
+Ks 0.10 0.30 0.35
+Ns 260
