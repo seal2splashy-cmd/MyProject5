@@ -300,7 +300,7 @@ private:
 
     // FOV
     UPROPERTY(EditAnywhere, Category = "Camera|FOV")
-    float BaseFOV = 90.f;
+    float BaseFOV = 100.f;
 
     UPROPERTY(EditAnywhere, Category = "Camera|FOV")
     float SprintFOVAdd = 20.f;
