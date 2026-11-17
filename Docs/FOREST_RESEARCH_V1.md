@@ -28,9 +28,12 @@ Your local Unreal Content Browser showed `Characters`, `Generated`, and `Maps`. 
    **Tools > Execute Python Script > `Tools/build_forest_research_ue58.py`**.
    This creates `/Game/Maps/AH_ForestResearch_Small` and places a **visual-only, non-colliding** preview anomaly in its server room if the OBJ imported successfully.
 5. In the Content Browser go to `Content/Maps/AH_ForestResearch_Small` and double-click to open. Press Play and test the entrance/hall/rooms. **The default map is intentionally unchanged.**
-6. Optional animation asset generation: open Blender 4.x/5.x, enter Scripting, run
-   `Tools/build_forest_anomaly_blender.py`.
+6. Optional animation asset generation: open Blender 4.x/5.x, enter Scripting,
+   use **Text > Open** on `Tools/build_forest_anomaly_blender.py` and press Run Script
+   (or from a terminal: `blender -b -P Tools/build_forest_anomaly_blender.py`).
+   Opening it from `Tools/` matters: that is how the script finds where to write its exports.
    **The Blender script deletes objects in its active scene**: start with a blank file or save your work first.
+   `Tools/Exports/` is git-ignored, so the generated files never get committed by accident.
    Exports are created in `Tools/Exports/ForestAnomaly/`:
    `SK_AH_ForestAnomaly.fbx`,
    `AN_AH_FA_Idle.fbx`, `AN_AH_FA_Walk.fbx`, `AN_AH_FA_Run.fbx`,
@@ -58,6 +61,9 @@ Your local Unreal Content Browser showed `Characters`, `Generated`, and `Maps`. 
 - Monitor FPS and actor counts; current individual primitive trees are placeholders and should eventually be replaced with instanced foliage.
 - The non-AI static preview never blocks passage.
 - Blender generator runs without errors, its skeleton deforms, and UE previews all seven clips on the same skeleton.
+  (Checked in Blender 5.2, Nov 2026: runs clean; read back from the exported FBXs, Turn/Idle/Alert/Investigate
+  turn the head and chest about the vertical, Walk/Run swing arms and legs forwards/back with the feet kept level,
+  Reach raises the arms forward. Not yet imported into Unreal.)
 - Actual enemy AI use of the new model is **not yet implemented**.
 
 ## Caveats

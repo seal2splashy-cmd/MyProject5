@@ -1,16 +1,41 @@
 """Create a stylised, non-graphic faceless research anomaly for Unreal 5.8.
 
-Run in Blender 4.x / 5.x with the Scripting workspace.
+Run in Blender 4.x / 5.x with the Scripting workspace (Text > Open this file,
+then Run Script), or from a terminal:
+    blender -b -P Tools/build_forest_anomaly_blender.py
 Generates an armature-skinned character and seven simple in-place action clips.
-Exports into <script folder>/Exports/ForestAnomaly.
+Exports into <script folder>/Exports/ForestAnomaly (i.e. Tools/Exports/ForestAnomaly).
 Only a procedural first-pass model; not a photorealistic final character.
 """
 import os
 import math
-from mathutils import Vector
+from mathutils import Vector, Quaternion
 import bpy
 
-ROOT = os.path.dirname(os.path.abspath(__file__))
+SCRIPT_NAME = "build_forest_anomaly_blender.py"
+
+def script_folder():
+    """Folder this script lives in, however it was started.
+
+    From a terminal (-P) __file__ is the real path. From Blender's Text Editor it
+    is "<blend file path>/<text name>", which is not a real folder (and is "/"
+    for an unsaved file), so fall back to the path of the opened text block.
+    """
+    try:
+        here = os.path.abspath(__file__)
+        if os.path.isfile(here):
+            return os.path.dirname(here)
+    except NameError:
+        pass
+    for text in bpy.data.texts:
+        path = bpy.path.abspath(text.filepath) if text.filepath else ""
+        if path and os.path.basename(path) == SCRIPT_NAME and os.path.isfile(path):
+            return os.path.dirname(path)
+    raise RuntimeError("Can't tell where %s lives. In Blender use Text > Open on "
+                       "Tools/%s and run it from there, or run: blender -b -P Tools/%s"
+                       % (SCRIPT_NAME, SCRIPT_NAME, SCRIPT_NAME))
+
+ROOT = script_folder()
 OUT = os.path.join(ROOT, "Exports", "ForestAnomaly")
 os.makedirs(OUT, exist_ok=True)
 
@@ -133,10 +158,48 @@ mod=skin.modifiers.new("ArmatureSkin","ARMATURE")
 mod.object=rig
 for p in skin.data.polygons:p.use_smooth=True
 # Set transparent? No, opaque faceplate intentionally.
+# ---------------------------------------------------------------------------
+# Posing. Every rotation below is written about the CHARACTER's axes
+# (forward = -Y, up = +Z, the anomaly's left = +X) and then converted into each
+# bone's own frame. Bone-local euler angles depend on how Blender happened to
+# roll each bone: on this rig a local-Z "turn" tilted the head and chest
+# sideways, and the arm swing flapped outwards.
+# ---------------------------------------------------------------------------
+AX_SIDE = Vector((1, 0, 0))     # pitch axis: limbs swing forward/back about it
+AX_FWD  = Vector((0, 1, 0))     # roll axis: tilts sideways about it
+AX_UP   = Vector((0, 0, 1))     # yaw axis: turns left/right about it
+REST = {b.name: b.matrix_local.to_quaternion() for b in data.bones}
+
+def rot(axis, degrees):
+    return Quaternion(axis, math.radians(degrees))
+
+def forward(degrees):
+    """A hanging limb swings forward (towards -Y) by this much; negative swings it back."""
+    return rot(AX_SIDE, -degrees)
+
+def outward(side, degrees):
+    """A hanging limb swings away from the body (sideways) by this much."""
+    return rot(AX_FWD, -degrees if side == "l" else degrees)
+
+def turn(degrees):
+    """Turn to the anomaly's left (positive) or right (negative) about the vertical."""
+    return rot(AX_UP, degrees)
+
+def tilt(degrees):
+    """Tilt the top of the bone towards the anomaly's left (positive) or right."""
+    return rot(AX_FWD, -degrees)
+
+def to_bone_space(bone, q):
+    # Pose basis that applies the character-axis rotation q to this bone,
+    # relative to its (possibly already posed) parent.
+    r = REST[bone]
+    return r.inverted() @ q @ r
+
 def reset_pose():
     for pb in rig.pose.bones:
-        pb.rotation_mode='XYZ'
-        pb.rotation_euler=(0,0,0)
+        pb.rotation_mode = 'QUATERNION'
+        pb.rotation_quaternion = (1, 0, 0, 0)
+        pb.location = (0, 0, 0)
 
 def action(name, frames, duration):
     reset_pose()
@@ -146,31 +209,46 @@ def action(name, frames, duration):
     for frame, rotations in frames:
         bpy.context.scene.frame_set(frame)
         reset_pose()
-        for bone, angles in rotations.items():
+        for bone, q in rotations.items():
             pb=rig.pose.bones.get(bone)
             if pb:
-                pb.rotation_euler=tuple(math.radians(v) for v in angles)
+                pb.rotation_quaternion=to_bone_space(bone, q)
         for pb in rig.pose.bones:
-            pb.keyframe_insert(data_path="rotation_euler",frame=frame,group=pb.name)
+            pb.keyframe_insert(data_path="rotation_quaternion",frame=frame,group=pb.name)
     act.use_fake_user=True
     return act
 
-def pose(leg=0,arm=0,head=0,torso=0,reach=0):
-    return {
-        "thigh_l":(leg,0,0),"thigh_r":(-leg,0,0),
-        "calf_l":(-max(leg,0)*.35,0,0),"calf_r":(-max(-leg,0)*.35,0,0),
-        "upperarm_l":(-arm,0,-3),"upperarm_r":(arm,0,3),
-        "lowerarm_l":(reach,0,-3),"lowerarm_r":(reach,0,3),
-        "head":(0,0,head),"chest":(0,0,torso)
-    }
+def pose(leg=0, arm=0, head=0, torso=0, reach=0, raise_arms=0, head_tilt=0):
+    """One key pose.
+
+    leg        + = left leg forward, right leg back (degrees at the hip)
+    arm        + = left arm back, right arm forward (arms swing against the legs)
+    head/torso + = turn to the anomaly's left (yaw); the head turns on top of the chest
+    reach      elbow bend, forearm swings forward (degrees)
+    raise_arms both upper arms swing forward/up (degrees)
+    head_tilt  + = head tilts towards its left shoulder
+    """
+    p = {}
+    for side, sgn in (("l", 1), ("r", -1)):
+        hip = leg * sgn                                   # + = this leg forward
+        knee = 4 + max(hip, 0) * .55 + max(-hip, 0) * .25  # forward leg bends more
+        p["thigh_"+side] = forward(hip)
+        p["calf_"+side] = forward(-knee)                  # lower leg folds back
+        p["foot_"+side] = forward(knee - hip)             # keep the sole level
+        p["upperarm_"+side] = forward(-arm * sgn + raise_arms) @ outward(side, 4)
+        p["lowerarm_"+side] = forward(reach)
+    p["chest"] = turn(torso)
+    p["head"] = turn(head) @ tilt(head_tilt)
+    return p
+
 clips={
- "Idle":(49,[(1,pose()),(13,pose(head=3,torso=1)),(25,pose(head=-2,torso=-1)),(37,pose(head=3,torso=1)),(49,pose())]),
- "Walk":(33,[(1,pose(leg=24,arm=18)),(9,pose(leg=0,arm=0)),(17,pose(leg=-24,arm=-18)),(25,pose(leg=0,arm=0)),(33,pose(leg=24,arm=18))]),
- "Run":(25,[(1,pose(leg=38,arm=33,reach=20)),(7,pose(leg=0,arm=0,reach=18)),(13,pose(leg=-38,arm=-33,reach=20)),(19,pose(leg=0,arm=0,reach=18)),(25,pose(leg=38,arm=33,reach=20))]),
- "Turn":(33,[(1,pose()),(13,pose(head=15,torso=12)),(23,pose(head=-14,torso=-12)),(33,pose())]),
- "Alert":(41,[(1,pose()),(8,pose(head=19,torso=8,reach=20)),(22,pose(head=16,torso=4,reach=25)),(41,pose())]),
- "Investigate":(61,[(1,pose()),(15,pose(head=12,torso=7,reach=8)),(30,pose(head=-15,torso=-6,reach=10)),(45,pose(head=8,torso=3,reach=6)),(61,pose())]),
- "Reach":(49,[(1,pose()),(12,pose(reach=45,head=5)),(27,pose(reach=60,head=9)),(38,pose(reach=35)),(49,pose())]),
+ "Idle":(49,[(1,pose(reach=6)),(13,pose(head=4,torso=1,reach=7)),(25,pose(head=-3,torso=-1,reach=6)),(37,pose(head=4,torso=1,reach=7)),(49,pose(reach=6))]),
+ "Walk":(33,[(1,pose(leg=24,arm=18,reach=12)),(9,pose(reach=14)),(17,pose(leg=-24,arm=-18,reach=12)),(25,pose(reach=14)),(33,pose(leg=24,arm=18,reach=12))]),
+ "Run":(25,[(1,pose(leg=38,arm=35,reach=70,torso=-6)),(7,pose(reach=65)),(13,pose(leg=-38,arm=-35,reach=70,torso=6)),(19,pose(reach=65)),(25,pose(leg=38,arm=35,reach=70,torso=-6))]),
+ "Turn":(33,[(1,pose(reach=6)),(13,pose(head=35,torso=18,reach=6)),(23,pose(head=-32,torso=-18,reach=6)),(33,pose(reach=6))]),
+ "Alert":(41,[(1,pose(reach=6)),(8,pose(head=28,torso=10,raise_arms=12,reach=35)),(22,pose(head=24,torso=6,raise_arms=10,reach=40)),(41,pose(reach=6))]),
+ "Investigate":(61,[(1,pose(reach=6)),(15,pose(head=18,torso=7,reach=12,head_tilt=14)),(30,pose(head=-20,torso=-6,reach=14,head_tilt=-16)),(45,pose(head=10,torso=3,reach=10,head_tilt=9)),(61,pose(reach=6))]),
+ "Reach":(49,[(1,pose(reach=6)),(12,pose(raise_arms=40,reach=35,head=5)),(27,pose(raise_arms=62,reach=25,head=9)),(38,pose(raise_arms=35,reach=30)),(49,pose(reach=6))]),
 }
 actions={}
 for name,(length,frames) in clips.items():
