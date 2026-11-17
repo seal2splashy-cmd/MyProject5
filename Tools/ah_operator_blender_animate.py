@@ -46,6 +46,18 @@ missing=[b for b in required if b not in arm.pose.bones]
 if missing:
     raise RuntimeError('Missing bones in v0.3 rig: '+', '.join(missing))
 
+# Which side of the rig each arm sits on, read from the rest pose instead of assumed.
+# The pack's original v0.3 rig had _l at -X. The fixed rig in this repo
+# (Tools/OperatorArms/rig_and_export_fbx_fixed.py) names bones by the operator's real
+# side, so _l is at +X. Hard-coding the old layout on the fixed rig crossed the arms.
+SIDE_SIGN = {s: (1 if arm.data.bones['hand_'+s].head_local.x >= 0 else -1) for s in ('l','r')}
+if SIDE_SIGN['l'] == SIDE_SIGN['r']:
+    raise RuntimeError('hand_l and hand_r are on the same side of the rig; cannot tell left from right.')
+SIDES = tuple((s, SIDE_SIGN[s]) for s in ('l','r'))
+# The hand motions below were authored for _l at -X; mirror their sideways part otherwise.
+MIRROR_X = -SIDE_SIGN['l']
+print('Operator rig sides: hand_l at %sX, hand_r at %sX' % ('+' if SIDE_SIGN['l']>0 else '-', '+' if SIDE_SIGN['r']>0 else '-'))
+
 ctrl_col = bpy.data.collections.get('AH_FP_IK_Controls')
 if not ctrl_col:
     ctrl_col = bpy.data.collections.new('AH_FP_IK_Controls')
@@ -61,9 +73,27 @@ def empty(name, position, size=0.045):
     o.location=position
     return o
 
+def rest_pole_angle(side, pole_local):
+    """Pole angle that makes the IK solve keep the rig's own rest roll for this arm.
+
+    A fixed 0.0 only works if the upper-arm bone roll happens to line up with the pole.
+    On the fixed rig the two arms need about -26 and -154 degrees; using 0 for both left
+    one arm rolled half a turn (candy-wrapper elbow, palm facing up).
+    """
+    base=arm.data.bones['upperarm_'+side]
+    tip=arm.data.bones['forearm_twist_'+side]
+    axis=base.tail_local-base.head_local
+    pole_normal=(tip.tail_local-base.head_local).cross(pole_local-base.head_local)
+    projected=pole_normal.cross(axis)
+    x_axis=base.matrix_local.to_3x3().col[0]
+    ang=x_axis.angle(projected)
+    if x_axis.cross(projected).angle(axis) < 1:
+        ang=-ang
+    return ang
+
 rest_targets={}
 controls=[]
-for side,sign in (('l',-1),('r',1)):
+for side,sign in SIDES:
     wrist_local=Vector((sign*.125,-.735,-.105))
     pole_local=Vector((sign*.38,-.41,-.24))
     target=empty('CTRL_AH_Hand_'+side,arm.matrix_world@wrist_local)
@@ -76,7 +106,8 @@ for side,sign in (('l',-1),('r',1)):
     c.pole_target=pole
     c.chain_count=3  # forearm_twist <- lowerarm <- upperarm
     c.use_stretch=False
-    c.pole_angle=0.0  # may require adjustment for a custom bone roll
+    c.pole_angle=rest_pole_angle(side,pole_local)  # from the rest pose, per arm
+    print('IK pole angle %s: %.1f deg' % (side, math.degrees(c.pole_angle)))
     rest_targets[side]=wrist_local
     controls.extend([target,pole])
     # Give wrist/hand their own independent motion after the IK chain.
@@ -97,6 +128,12 @@ clips={
 }
 
 def hand_offset(typ,t,side):
+    """Hand target offset for this clip, in the rig's own left/right layout."""
+    v=_authored_hand_offset(typ,t,side)
+    v.x*=MIRROR_X
+    return v
+
+def _authored_hand_offset(typ,t,side):
     phase = 0 if side=='l' else math.pi
     if typ=='idle':
         return Vector((.008*math.sin(2*math.pi*t+phase), .008*math.sin(2*math.pi*t+phase+.7), .007*math.cos(2*math.pi*t+.8+phase)))
@@ -135,7 +172,7 @@ def reset_pose():
 
 # Save an IK editable file before exporting. It also contains the targets and
 # independent elbow controls for further animator edits.
-for side,sign in (('l',-1),('r',1)):
+for side,sign in SIDES:
     bpy.data.objects['CTRL_AH_Hand_'+side].location=arm.matrix_world@rest_targets[side]
 editable=os.path.join(OUT_DIR,'AH_Operator_FP_v04_IK_Controls.blend')
 bpy.ops.wm.save_as_mainfile(filepath=editable)

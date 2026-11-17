@@ -19,7 +19,7 @@ The GitHub branch is `feature/operator-fp-rig-v04` and must **not** be merged un
 
 ## 1. Make the five animation FBXs in Blender
 
-1. Open the v0.3 `Exports/AnomalyHunter_ContainmentOperator_Rigged.blend` in Blender.
+1. Open the rigged `AnomalyHunter_ContainmentOperator_Rigged.blend` in Blender. Use the one made by this repo's fixed rig script (`Tools/OperatorArms/rig_and_export_fbx_fixed.py`, output in `Tools/OperatorArms/Exports/`) so the clips match the FBX in `Assets/OperatorArms/`.
 2. Open and Run `Tools/ah_operator_blender_animate.py` from the add-on package.
 3. Look inside the NEW folder `Exports/Operator_v04/` for:
     - `AH_Operator_FP_v04_IK_Controls.blend`
@@ -31,7 +31,7 @@ The GitHub branch is `feature/operator-fp-rig-v04` and must **not** be merged un
 4. Open the new .blend. In Pose Mode move `CTRL_AH_Hand_l` and `CTRL_AH_Hand_r` independently. Move the corresponding `CTRL_AH_Elbow_l/r` to adjust bending direction.
 5. Inspect elbows, wrists and fingers. If the elbow bends backwards, adjust the IK constraint's Pole Angle in Blender and re-bake before importing.
 
-**Caveat:** This generator is syntax-checked, but Blender was not available in the build environment. It needs a local test to confirm the resulting animation curves and deformation. Blender may require minor tweaks depending on the precise existing rig and bone rolls.
+**Tested (Nov 2026):** the script has been run in Blender (bpy 5.2) against the fixed rig. It reads which side each arm is on and the IK pole angle from the rest pose, so it works on both the fixed rig (`_l` at +X) and the pack's original layout. All five clips bake with the arms on their own sides, no forearm twist and fingers curling towards the palm. The clips have not been imported into Unreal yet.
 
 ## 2. Copy assets into your local project
 
@@ -60,12 +60,12 @@ The scanner is a separate, static **diagnostic instrument**. It isn't part of th
 ## 3. Import into Unreal
 
 1. Build and open your **UE 5.8** project.
-2. Confirm the new skeletal mesh is `character` at `/Game/character`. If not, edit `MESH_ASSET_PATH` in `Tools/ah_operator_import_ue58.py` to its real Unreal asset path.
+2. Confirm the operator skeletal mesh is at `/Game/Generated/Operator/SK_AH_ContainmentOperator_FP` (run `Tools/ue_setup_project.py` if it isn't there). If yours lives elsewhere, edit `MESH_ASSET_PATH` in `Tools/ah_operator_import_ue58.py`. Do not use `/Game/character`: in MyProject5 that is the old Mixamo arms, a different skeleton.
 3. In the editor use **Tools → Execute Python Script...** and choose `Tools/ah_operator_import_ue58.py`.
 4. It imports the five animation FBXs against your existing skeleton (if they exist), textures, four PBR materials and the scanner GLB under `/Game/Characters/Operator_FP/`.
 5. Open `AH_FP_Walk` in the Animation Sequence editor and check that elbows **move relative to shoulders** and the hands aren't simply translated with the camera.
 6. If UE 5.8 uses a different FBX importer in your setup, import each FBX manually with **Import Mesh OFF**, **Import Animations ON**, and your **existing operator Skeleton** selected.
-7. Assign the new materials to your existing `character` skeletal mesh's material slots by appearance. Avoid changing material slot order if it is already referenced elsewhere.
+7. Assign the new materials to the operator skeletal mesh's material slots by appearance. Avoid changing material slot order if it is already referenced elsewhere.
 
 **The import script will not create an Animation Blueprint node graph automatically** because that requires editor validation in your exact UE 5.8 build. Use the next step to set it up deliberately.
 
@@ -140,6 +140,6 @@ Official engine references:
 
 ## Existing native operator IK: preferred path
 
-Current MyProject5 already provides `UOperatorArmsComponent` with independent elbow, forearm, wrist, and finger posing. Its expected mesh path is `/Game/Generated/Operator/SK_AH_ContainmentOperator_FP`; the user's earlier manually imported mesh may instead be `/Game/character`. Run the included `ah_operator_activate_existing_ik_ue58.py` helper first. If the target path already exists, no changes are made. Otherwise, it safely duplicates the source skeletal mesh. Restart Play and inspect `OperatorArms:` messages in Output Log for any calibration failure. The existing repo includes a corrected fixed FBX in `Assets/OperatorArms/` if the older, uncorrected rig has mismatched bones/axes.
+Current MyProject5 already provides `UOperatorArmsComponent` with independent elbow, forearm, wrist, and finger posing. Its expected mesh path is `/Game/Generated/Operator/SK_AH_ContainmentOperator_FP`; `Tools/ue_setup_project.py` imports the fixed rig there. (`/Game/character` is the old Mixamo arms the pawn falls back to, not the operator rig.) The included `ah_operator_activate_existing_ik_ue58.py` helper is only for an operator mesh you imported by hand somewhere else: set its `SOURCE` to that asset. If the target path already exists, no changes are made. Otherwise, it safely duplicates the source skeletal mesh. Restart Play and inspect `OperatorArms:` messages in Output Log for any calibration failure. The existing repo includes a corrected fixed FBX in `Assets/OperatorArms/` if the older, uncorrected rig has mismatched bones/axes.
 
 The Blender IK and Animation Blueprint procedure in this guide is an **alternative optional animation-authoring workflow**. It is not needed for the existing `UPoseableMeshComponent`'s live IK and should not be connected over it.

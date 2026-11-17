@@ -24,8 +24,10 @@ ANIM_DEST = ROOT + '/Animations'
 TEX_DEST = ROOT + '/Textures'
 MAT_DEST = ROOT + '/Materials'
 PROPS_DEST = ROOT + '/Props'
-# Adjust this to your existing v0.3 skeletal mesh asset if you gave it a different name.
-MESH_ASSET_PATH = '/Game/character'
+# The operator arms skeletal mesh the animations are imported against. This is where
+# Tools/ue_setup_project.py puts it and where UOperatorArmsComponent loads it from.
+# (Not '/Game/character': in MyProject5 that is the old Mixamo arms, a different skeleton.)
+MESH_ASSET_PATH = '/Game/Generated/Operator/SK_AH_ContainmentOperator_FP'
 
 EAL = unreal.EditorAssetLibrary
 AT = unreal.AssetToolsHelpers.get_asset_tools()
@@ -140,7 +142,10 @@ def setup_textures():
 def setup_animations():
     mesh=EAL.load_asset(MESH_ASSET_PATH)
     if not mesh:
-        warning('No mesh at '+MESH_ASSET_PATH+'. Import v0.3 arms and fix MESH_ASSET_PATH.')
+        warning('No mesh at '+MESH_ASSET_PATH+'. Run Tools/ue_setup_project.py first (it imports the operator arms), or fix MESH_ASSET_PATH.')
+        return
+    if 'SkeletalMesh' not in mesh.get_class().get_name():
+        warning(MESH_ASSET_PATH+' is not a SkeletalMesh. Cannot import animation FBXs.')
         return
     try: skeleton=mesh.get_editor_property('skeleton')
     except Exception as exc:
