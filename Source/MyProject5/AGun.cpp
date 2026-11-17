@@ -65,6 +65,30 @@ void AGun::PlayGunSound(const TSoftObjectPtr<USoundBase>& Sound, float Volume, f
 void AGun::BeginPlay()
 {
     Super::BeginPlay();
+
+    // Optional visual-only replacement for the previous imported pistol.
+    // This asset is intentionally not a hard dependency: until it is imported,
+    // the existing visual mesh and hand offsets continue to work unchanged.
+    const FSoftObjectPath OptionalSidearmPath(
+        TEXT("/Game/Generated/Operator/Props/SM_AH_FieldSidearm.SM_AH_FieldSidearm"));
+    if (UStaticMesh* SidearmVisual = Cast<UStaticMesh>(OptionalSidearmPath.TryLoad()))
+    {
+        MeshComp->SetStaticMesh(SidearmVisual);
+
+        // Modelled in Unreal centimetres: +X forwards, +Y right, +Z up.
+        // Unlike the previous asset, it needs no 90-degree mesh correction.
+        MeshComp->SetRelativeLocation(FVector(38.f, 9.f, -11.f));
+        MeshComp->SetRelativeRotation(FRotator::ZeroRotator);
+        MeshComp->SetRelativeScale3D(FVector::OneVector);
+
+        // Separate primary and support grips placed on the model itself.
+        // The original hands were only ~3 cm apart, causing overlap.
+        GripOffset = FVector(-5.f, 0.f, -10.f);
+        SupportHandOffset = FVector(21.f, -9.f, 1.f);
+        GripAxis = FVector::UpVector;
+
+        UE_LOG(LogTemp, Log, TEXT("AGun: optional operator sidearm visual loaded."));
+    }
 }
 
 bool AGun::GetMuzzleTransform(FVector& OutLoc, FRotator& OutRot) const
