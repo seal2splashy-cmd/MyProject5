@@ -11,6 +11,7 @@
 #include "Engine/SkeletalMesh.h"
 #include "Engine/SkinnedAsset.h"
 #include "Engine/World.h"
+#include "Misc/PackageName.h"
 #include "ReferenceSkeleton.h"
 
 UOperatorArmsComponent::UOperatorArmsComponent()
@@ -28,6 +29,8 @@ UOperatorArmsComponent::UOperatorArmsComponent()
 
 	OperatorMesh = TSoftObjectPtr<USkeletalMesh>(FSoftObjectPath(
 		TEXT("/Game/Generated/Operator/SK_AH_ContainmentOperator_FP.SK_AH_ContainmentOperator_FP")));
+	MeshyArmsMesh = TSoftObjectPtr<USkeletalMesh>(FSoftObjectPath(
+		TEXT("/Game/Generated/Operator/SK_AH_OperatorArms_Meshy.SK_AH_OperatorArms_Meshy")));
 }
 
 // ------------------------------------------------------------------ setup
@@ -36,7 +39,18 @@ bool UOperatorArmsComponent::InitOperatorArms()
 {
 	bReady = false;
 
-	USkeletalMesh* MeshAsset = OperatorMesh.LoadSynchronous();
+	// The Meshy arms if they're imported (checked first so a missing package doesn't log a load
+	// warning), else the original operator arms. Same skeleton, so everything below is shared.
+	USkeletalMesh* MeshAsset = nullptr;
+	if (bPreferMeshyArms && !MeshyArmsMesh.IsNull() &&
+		FPackageName::DoesPackageExist(MeshyArmsMesh.ToSoftObjectPath().GetLongPackageName()))
+	{
+		MeshAsset = MeshyArmsMesh.LoadSynchronous();
+	}
+	if (!MeshAsset)
+	{
+		MeshAsset = OperatorMesh.LoadSynchronous();
+	}
 	if (!MeshAsset)
 	{
 		UE_LOG(LogTemp, Log, TEXT("OperatorArms: %s isn't imported yet - run Tools/ue_setup_project.py. Using the old arms."),
@@ -46,6 +60,7 @@ bool UOperatorArmsComponent::InitOperatorArms()
 	}
 
 	SetSkinnedAssetAndUpdate(MeshAsset, true);
+	UE_LOG(LogTemp, Log, TEXT("OperatorArms: using %s"), *MeshAsset->GetName());
 
 	if (!CalibrateRig())
 	{

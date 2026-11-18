@@ -22,7 +22,9 @@
 - UMeleeCombatComponent - glue between pawn and melee weapon, holds the weapon list
 - AMeleePipe / AMeleeCrowbar / AMeleeMachete / AMeleeFireAxe (MeleeWeaponTypes) - built from engine shapes,
   or an imported ModelMesh when there is one (the pipe has the Meshy model)
-- UOperatorArmsComponent - PoseableMesh FP arms, two-bone IK + finger curl onto gun/melee grips (no anims)
+- UOperatorArmsComponent - PoseableMesh FP arms, two-bone IK + finger curl onto gun/melee grips (no anims).
+  Uses SK_AH_OperatorArms_Meshy (Meshy gloved forearms on the same rig) when imported, else
+  SK_AH_ContainmentOperator_FP (bPreferMeshyArms; Docs/OPERATOR_ARMS_MESHY.md)
 - UBodycamLensComponent - camera post-process bodycam look (barrel distortion via M_BodycamLens, fringing,
   grain, vignette, flat colour, slow exposure) + SetInterference / ReportInterference (driven by AGauntAnomaly)
 - UBodycamTorchComponent - chest spot light on the camera: lagged aim, shimmer, battery with low-battery stutter
@@ -38,6 +40,8 @@
   pistol.glb/pipe.glb into Assets/Weapons/SM_AH_Pistol/SM_AH_Pipe (real size, Unreal frame, pivots, measured
   grip/muzzle numbers, 2K textures with DirectX normals); Tools/import_meshy_weapons_ue58.py imports them.
   AGun and AMeleePipe use them automatically when imported (AMeleeWeapon::ModelMesh).
+- Meshy arms: Assets/Meshy/arms/ (FBX + PNGs) -> Tools/build_meshy_arms_blender.py fits them onto the operator
+  rig -> Assets/OperatorArmsMeshy/SK_AH_OperatorArms_Meshy.fbx + T_AH_MeshyArms_*; Tools/import_meshy_arms_ue58.py.
 
 ## Controls
 WASD move, Shift sprint, Ctrl crouch (slide while sprinting), Space jump, Q/E head tilt, Z/C lean,

@@ -49,6 +49,15 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Operator Arms")
 	TSoftObjectPtr<USkeletalMesh> OperatorMesh;
 
+	/** The Meshy gloved forearms + hands on the same rig (Tools/build_meshy_arms_blender.py,
+	 *  imported by Tools/import_meshy_arms_ue58.py). Used instead of OperatorMesh when imported. */
+	UPROPERTY(EditAnywhere, Category = "Operator Arms")
+	TSoftObjectPtr<USkeletalMesh> MeshyArmsMesh;
+
+	/** Untick to go back to the original operator arms even when the Meshy ones are imported. */
+	UPROPERTY(EditAnywhere, Category = "Operator Arms")
+	bool bPreferMeshyArms = true;
+
 	/** 1 = the mesh's authored size. The authored arms are long, so they're scaled down a bit. */
 	UPROPERTY(EditAnywhere, Category = "Operator Arms", meta = (ClampMin = 0.3, ClampMax = 2))
 	float ArmsScale = 0.75f;

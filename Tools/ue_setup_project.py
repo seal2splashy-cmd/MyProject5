@@ -542,7 +542,8 @@ def main():
         task.enter_progress_frame(1, "Done")
     # Bodycam lens material + torch click, service pistol (separate scripts so they can run on their own too)
     import runpy
-    for extra in ("build_bodycam_fx_ue58.py", "import_pistol_ue58.py", "import_meshy_weapons_ue58.py", "import_gaunt_ue58.py"):
+    for extra in ("build_bodycam_fx_ue58.py", "import_pistol_ue58.py", "import_meshy_weapons_ue58.py", "import_meshy_arms_ue58.py",
+                  "import_gaunt_ue58.py"):
         extra_script = os.path.join(PROJECT_DIR, "Tools", extra)
         if os.path.isfile(extra_script):
             runpy.run_path(extra_script, run_name="__main__")
