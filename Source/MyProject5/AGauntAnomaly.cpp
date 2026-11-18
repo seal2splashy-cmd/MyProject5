@@ -94,10 +94,10 @@ void AGauntAnomaly::ApplyVisuals()
     }
 
     bRigged = false;
-    if (UStaticMesh* Mesh = LoadIfPresent(StandInMesh))
+    if (UStaticMesh* StandInAsset = LoadIfPresent(StandInMesh))
     {
         // The Meshy model's origin is the middle of the body = the capsule centre.
-        StandIn->SetStaticMesh(Mesh);
+        StandIn->SetStaticMesh(StandInAsset);
         StandIn->SetVisibility(true);
         StandIn->SetRelativeLocationAndRotation(FVector::ZeroVector, FRotator(0.f, MeshYaw, 0.f));
     }
