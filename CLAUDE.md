@@ -10,8 +10,8 @@
 - AMyFPSPawn - APawn with manual movement, stamina, bodycam camera FX, health/death, FP arms, weapon slots
 - AMyGameMode - sets AMyFPSPawn + AMyHUD
 - AGun - pistol: fire/reload/recoil, first-person offset, GetMuzzleAimPoint (crosshair + bullets share it).
-  Mesh: SM_AH_ServicePistol if imported (Tools/build_pistol_blender.py -> Assets/Weapons -> Tools/import_pistol_ue58.py),
-  else the field sidearm prop, else the old Fab pistol; BeginPlay sets grip/muzzle offsets to match
+  Mesh, first one imported wins: SM_AH_Pistol (Meshy), SM_AH_ServicePistol (Tools/build_pistol_blender.py),
+  the field sidearm prop, the old Fab pistol; BeginPlay sets grip/muzzle offsets to match
 - ABullet - manual gravity + quadratic drag, sphere-swept collision
 - AEnemy - ACharacter, 4-state FSM, predictive chase with adaptive bias, ragdoll death
 - ASmartEnemy - AEnemy + Q-learning (FQLearningAgent + FPlayerTracker), Saved/QLearning/qtable.json
@@ -20,7 +20,8 @@
 - AMyHUD - dynamic crosshair, health/stamina bars, ammo, death screen
 - AMeleeWeapon - physics melee: spring-damper hand, mouse-steered guard, velocity-based damage
 - UMeleeCombatComponent - glue between pawn and melee weapon, holds the weapon list
-- AMeleePipe / AMeleeCrowbar / AMeleeMachete / AMeleeFireAxe (MeleeWeaponTypes) - built from engine shapes
+- AMeleePipe / AMeleeCrowbar / AMeleeMachete / AMeleeFireAxe (MeleeWeaponTypes) - built from engine shapes,
+  or an imported ModelMesh when there is one (the pipe has the Meshy model)
 - UOperatorArmsComponent - PoseableMesh FP arms, two-bone IK + finger curl onto gun/melee grips (no anims)
 - UBodycamLensComponent - camera post-process bodycam look (barrel distortion via M_BodycamLens, fringing,
   grain, vignette, flat colour, slow exposure) + SetInterference / ReportInterference (driven by AGauntAnomaly)
@@ -33,6 +34,10 @@
   silently skips anything missing. See README_ASSETS.md.
 - Assets/OperatorArms holds the rigged Anomaly Hunter operator arms FBX + PBR maps (Tools/OperatorArms/README.md).
   If they aren't imported, the pawn falls back to the old Mixamo ArmsMesh.
+- Meshy models: raw downloads go in Assets/Meshy (git-ignored); Tools/prepare_meshy_weapons_blender.py turns
+  pistol.glb/pipe.glb into Assets/Weapons/SM_AH_Pistol/SM_AH_Pipe (real size, Unreal frame, pivots, measured
+  grip/muzzle numbers, 2K textures with DirectX normals); Tools/import_meshy_weapons_ue58.py imports them.
+  AGun and AMeleePipe use them automatically when imported (AMeleeWeapon::ModelMesh).
 
 ## Controls
 WASD move, Shift sprint, Ctrl crouch (slide while sprinting), Space jump, Q/E head tilt, Z/C lean,

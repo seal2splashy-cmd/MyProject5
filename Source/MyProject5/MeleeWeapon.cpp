@@ -16,6 +16,7 @@
 #include "Materials/MaterialInterface.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Sound/SoundBase.h"
+#include "Misc/PackageName.h"
 
 AMeleeWeapon::AMeleeWeapon()
 {
@@ -36,6 +37,14 @@ AMeleeWeapon::AMeleeWeapon()
 	Mesh->SetGenerateOverlapEvents(false);
 	Mesh->CastShadow = false;
 	Parts.Add(Mesh);
+
+	// Optional imported model (see ModelMesh); hidden until one is found.
+	ModelComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Model"));
+	ModelComp->SetupAttachment(Root);
+	ModelComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	ModelComp->SetGenerateOverlapEvents(false);
+	ModelComp->CastShadow = false;
+	ModelComp->SetVisibility(false);
 	PartColours.Add(FLinearColor(0.35f, 0.33f, 0.30f));
 	PartMaterials.Add(TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Generated/Materials/M_RustMetal.M_RustMetal"))));
 
@@ -118,8 +127,43 @@ void AMeleeWeapon::SetBladePoints(const FVector& Base, const FVector& Tip)
 void AMeleeWeapon::BeginPlay()
 {
 	Super::BeginPlay();
+	ApplyModel();          // may move the hands and blade points, so before caching them
 	CacheBladeLocals();
 	ApplyLook();
+}
+
+void AMeleeWeapon::ApplyModel()
+{
+	bUsingModel = false;
+	UStaticMesh* Model = nullptr;
+	if (!ModelMesh.IsNull())
+	{
+		Model = ModelMesh.Get();
+		if (!Model && FPackageName::DoesPackageExist(ModelMesh.GetLongPackageName()))
+		{
+			Model = ModelMesh.LoadSynchronous();
+		}
+	}
+	if (!Model || !ModelComp)
+	{
+		return;   // keep the engine-shape look
+	}
+
+	ModelComp->SetStaticMesh(Model);
+	ModelComp->SetRelativeTransform(FTransform::Identity);
+	ModelComp->SetVisibility(true);
+	for (UStaticMeshComponent* Part : Parts)
+	{
+		if (Part)
+		{
+			Part->SetVisibility(false);
+		}
+	}
+
+	MainHandOffset = ModelMainHandOffset;
+	SecondHandOffset = ModelSecondHandOffset;
+	SetBladePoints(ModelBladeBase, ModelBladeTip);
+	bUsingModel = true;
 }
 
 void AMeleeWeapon::ApplyLook()

@@ -23,3 +23,6 @@ Tools/Exports/
 
 # Raw Mixamo downloads for the Gaunt (merged into Assets/Anomaly/Gaunt/Rigged by Tools/rig_gaunt_from_mixamo_blender.py)
 Assets/Anomaly/Gaunt/Mixamo/
+
+# Raw Meshy downloads (processed into Assets/Weapons by Tools/prepare_meshy_weapons_blender.py)
+Assets/Meshy/

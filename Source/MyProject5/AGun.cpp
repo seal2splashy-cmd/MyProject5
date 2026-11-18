@@ -78,7 +78,27 @@ void AGun::BeginPlay()
             : nullptr;
     };
 
-    // 1. Service pistol (Tools/build_pistol_blender.py -> Tools/import_pistol_ue58.py).
+    // 1. Meshy pistol (Tools/prepare_meshy_weapons_blender.py -> Tools/import_meshy_weapons_ue58.py).
+    //    18.7 cm, pivot placed so the grip centre is at GripOffset; numbers measured by that script.
+    if (UStaticMesh* MeshyPistol = LoadOptionalMesh(
+            TEXT("/Game/Generated/Weapons/SM_AH_Pistol"),
+            TEXT("/Game/Generated/Weapons/SM_AH_Pistol.SM_AH_Pistol")))
+    {
+        MeshComp->SetStaticMesh(MeshyPistol);
+        MeshComp->SetRelativeLocation(FVector(38.f, 9.f, -11.f));
+        MeshComp->SetRelativeRotation(FRotator::ZeroRotator);
+        MeshComp->SetRelativeScale3D(FVector::OneVector);
+
+        GripOffset = FVector(-3.f, 0.f, -7.f);
+        GripAxis = FVector(0.35f, 0.f, 0.94f);
+        SupportHandOffset = FVector(1.f, -3.f, -1.f);
+        MuzzleOffsetLocal = FVector(11.86f, 0.f, -0.84f);
+
+        UE_LOG(LogTemp, Log, TEXT("AGun: Meshy pistol mesh loaded."));
+        return;
+    }
+
+    // 2. Procedural service pistol (Tools/build_pistol_blender.py -> Tools/import_pistol_ue58.py).
     //    Unreal cm, +X out of the muzzle, +Y right, +Z up; pivot placed so the grip centre is
     //    at GripOffset below. All numbers here come from that script.
     if (UStaticMesh* Pistol = LoadOptionalMesh(
@@ -99,7 +119,7 @@ void AGun::BeginPlay()
         return;
     }
 
-    // 2. Operator field sidearm prop (Tools/import_operator_sidearm_ue58.py).
+    // 3. Operator field sidearm prop (Tools/import_operator_sidearm_ue58.py).
     if (UStaticMesh* SidearmVisual = LoadOptionalMesh(
             TEXT("/Game/Generated/Operator/Props/SM_AH_FieldSidearm"),
             TEXT("/Game/Generated/Operator/Props/SM_AH_FieldSidearm.SM_AH_FieldSidearm")))
@@ -122,7 +142,7 @@ void AGun::BeginPlay()
         UE_LOG(LogTemp, Log, TEXT("AGun: optional operator sidearm visual loaded."));
     }
 
-    // 3. Otherwise: the old Fab pistol from the constructor, if it's in the project.
+    // 4. Otherwise: the old Fab pistol from the constructor, if it's in the project.
 }
 
 bool AGun::GetMuzzleTransform(FVector& OutLoc, FRotator& OutRot) const
