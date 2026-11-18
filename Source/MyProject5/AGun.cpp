@@ -5,6 +5,7 @@
 #include "UObject/SoftObjectPath.h"
 #include "Components/SceneComponent.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Misc/PackageName.h"
 #include "TimerManager.h"
 #include "Engine/World.h"
 #include "Camera/CameraComponent.h"
@@ -26,15 +27,14 @@ AGun::AGun()
     MeshComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComp"));
     RootComponent = MeshComp;
 
+    // The old Fab pistol is optional. A ConstructorHelpers lookup logs an Error on every
+    // editor start when it isn't in the project, so check the package exists first.
+    if (FPackageName::DoesPackageExist(TEXT("/Game/Fab/GUN_Pistol_Orange/pistolorange")))
     {
         ConstructorHelpers::FObjectFinder<UStaticMesh> GunMeshFinder(PATH_GUN_STATIC_MESH);
         if (GunMeshFinder.Succeeded())
         {
             MeshComp->SetStaticMesh(GunMeshFinder.Object);
-        }
-        else
-        {
-            UE_LOG(LogTemp, Warning, TEXT("AGun: failed to load mesh at %s"), PATH_GUN_STATIC_MESH);
         }
     }
 

@@ -100,10 +100,28 @@ def tex(name, folder=TEX_DST):
 
 
 def new_material(name, folder=MAT_DST):
+    """Empty material at folder/name. An existing one is cleared and reused rather than
+    deleted, so maps that already use it keep their assignments."""
     path = folder + "/" + name
     if eal.does_asset_exist(path):
+        mat = eal.load_asset(path)
+        if isinstance(mat, unreal.Material):
+            mel.delete_all_material_expressions(mat)
+            return mat
         eal.delete_asset(path)
     return asset_tools.create_asset(name, folder, unreal.Material, unreal.MaterialFactoryNew())
+
+
+def mask(mat, r, g, b, x, y):
+    """Component mask with ALL four channels set explicitly. A new mask node defaults to
+    R+G on, so setting only the wanted channel gave 2-3 component outputs and the
+    AppendVector below failed to compile ("Can't append LWCVector2 to LWCVector3")."""
+    m = mel.create_material_expression(mat, unreal.MaterialExpressionComponentMask, x, y)
+    m.set_editor_property("r", r)
+    m.set_editor_property("g", g)
+    m.set_editor_property("b", b)
+    m.set_editor_property("a", False)
+    return m
 
 
 def world_uv(mat, tile_cm, x, y):
@@ -111,16 +129,12 @@ def world_uv(mat, tile_cm, x, y):
     floors use (X, Y), walls use (X+Y, Z) - one of X/Y is constant along any axis-aligned wall."""
     wp = mel.create_material_expression(mat, unreal.MaterialExpressionWorldPosition, x - 900, y)
 
-    mask_xy = mel.create_material_expression(mat, unreal.MaterialExpressionComponentMask, x - 700, y - 80)
-    mask_xy.set_editor_property("r", True); mask_xy.set_editor_property("g", True)
+    mask_xy = mask(mat, True, True, False, x - 700, y - 80)
     mel.connect_material_expressions(wp, "", mask_xy, "")
 
-    mask_x = mel.create_material_expression(mat, unreal.MaterialExpressionComponentMask, x - 700, y + 20)
-    mask_x.set_editor_property("r", True)
-    mask_y = mel.create_material_expression(mat, unreal.MaterialExpressionComponentMask, x - 700, y + 100)
-    mask_y.set_editor_property("g", True)
-    mask_z = mel.create_material_expression(mat, unreal.MaterialExpressionComponentMask, x - 700, y + 180)
-    mask_z.set_editor_property("b", True)
+    mask_x = mask(mat, True, False, False, x - 700, y + 20)
+    mask_y = mask(mat, False, True, False, x - 700, y + 100)
+    mask_z = mask(mat, False, False, True, x - 700, y + 180)
     for m in (mask_x, mask_y, mask_z):
         mel.connect_material_expressions(wp, "", m, "")
 
@@ -133,8 +147,7 @@ def world_uv(mat, tile_cm, x, y):
     mel.connect_material_expressions(mask_z, "", wall_uv, "B")
 
     nrm = mel.create_material_expression(mat, unreal.MaterialExpressionVertexNormalWS, x - 700, y + 280)
-    nz = mel.create_material_expression(mat, unreal.MaterialExpressionComponentMask, x - 560, y + 280)
-    nz.set_editor_property("b", True)
+    nz = mask(mat, False, False, True, x - 560, y + 280)
     mel.connect_material_expressions(nrm, "", nz, "")
     nz_abs = mel.create_material_expression(mat, unreal.MaterialExpressionAbs, x - 440, y + 280)
     mel.connect_material_expressions(nz, "", nz_abs, "")
@@ -535,4 +548,6 @@ def main():
     log("All done - press Play in /Game/Maps/TestArena")
 
 
-main()
+# Other tools (e.g. rebuild_materials_ue58.py) load this file just for its functions.
+if not globals().get("MYPROJECT5_SETUP_AS_LIBRARY"):
+    main()
