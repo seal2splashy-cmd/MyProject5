@@ -5,6 +5,7 @@
 #include "Animation/AnimationAsset.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Engine/DamageEvents.h"
 #include "Engine/World.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -44,8 +45,15 @@ void AEnemy::BeginPlay()
     CurrentPatrolTarget = PickNewPatrolPoint();
     PlayerPawn = UGameplayStatics::GetPlayerPawn(this, 0);
 
-    // No skeletal mesh assigned yet? Show the capsule so you can still see and test it.
-    if (!GetMesh() || !GetMesh()->GetSkeletalMeshAsset())
+    // No body at all (no skeletal mesh, and no static mesh a subclass might use instead)?
+    // Show the capsule so you can still see and test it.
+    bool bHasStaticBody = false;
+    TInlineComponentArray<UStaticMeshComponent*> StaticMeshes(this);
+    for (const UStaticMeshComponent* SM : StaticMeshes)
+    {
+        bHasStaticBody |= (SM->GetStaticMesh() != nullptr && SM->IsVisible());
+    }
+    if (!bHasStaticBody && (!GetMesh() || !GetMesh()->GetSkeletalMeshAsset()))
     {
         UE_LOG(LogTemp, Warning, TEXT("%s has no skeletal mesh - make a Blueprint child and assign one."), *GetName());
         if (UCapsuleComponent* Cap = GetCapsuleComponent())

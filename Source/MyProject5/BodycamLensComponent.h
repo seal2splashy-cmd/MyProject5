@@ -38,6 +38,13 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Bodycam")
     void SetInterference(float Amount01);
 
+    /**
+     * For things that cause interference every frame (e.g. each nearby anomaly): call it in Tick.
+     * The strongest report this frame wins, so several sources don't fight; when they stop
+     * reporting the picture clears up again on its own.
+     */
+    void ReportInterference(float Amount01);
+
     float GetInterference() const { return Interference; }
 
     /**
@@ -122,6 +129,7 @@ private:
 
     float Interference = 0.f;
     float InterferenceTarget = 0.f;
+    float ReportedThisFrame = 0.f;   // max of ReportInterference calls since the last tick
     float Glitch = 0.f;          // 1 at the start of a burst, decays fast
     float GlitchPhase = 0.f;
     float CurrentDistortion = 0.f;   // what the material is using this frame

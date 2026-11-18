@@ -15,13 +15,15 @@
 - ABullet - manual gravity + quadratic drag, sphere-swept collision
 - AEnemy - ACharacter, 4-state FSM, predictive chase with adaptive bias, ragdoll death
 - ASmartEnemy - AEnemy + Q-learning (FQLearningAgent + FPlayerTracker), Saved/QLearning/qtable.json
+- AGauntAnomaly - ASmartEnemy with the Gaunt's body: rigged SK_AH_Gaunt + clips if imported, else the static
+  stand-in with procedural motion; reports bodycam interference when near (Docs/GAUNT_ANOMALY.md)
 - AMyHUD - dynamic crosshair, health/stamina bars, ammo, death screen
 - AMeleeWeapon - physics melee: spring-damper hand, mouse-steered guard, velocity-based damage
 - UMeleeCombatComponent - glue between pawn and melee weapon, holds the weapon list
 - AMeleePipe / AMeleeCrowbar / AMeleeMachete / AMeleeFireAxe (MeleeWeaponTypes) - built from engine shapes
 - UOperatorArmsComponent - PoseableMesh FP arms, two-bone IK + finger curl onto gun/melee grips (no anims)
 - UBodycamLensComponent - camera post-process bodycam look (barrel distortion via M_BodycamLens, fringing,
-  grain, vignette, flat colour, slow exposure) + SetInterference(0..1) hook, not driven by anything yet
+  grain, vignette, flat colour, slow exposure) + SetInterference / ReportInterference (driven by AGauntAnomaly)
 - UBodycamTorchComponent - chest spot light on the camera: lagged aim, shimmer, battery with low-battery stutter
   (Docs/BODYCAM_FX.md)
 

@@ -45,6 +45,11 @@ void UBodycamLensComponent::SetInterference(float Amount01)
     InterferenceTarget = FMath::Clamp(Amount01, 0.f, 1.f);
 }
 
+void UBodycamLensComponent::ReportInterference(float Amount01)
+{
+    ReportedThisFrame = FMath::Max(ReportedThisFrame, FMath::Clamp(Amount01, 0.f, 1.f));
+}
+
 void UBodycamLensComponent::TickComponent(float DeltaTime, ELevelTick TickType,
     FActorComponentTickFunction* ThisTickFunction)
 {
@@ -54,7 +59,10 @@ void UBodycamLensComponent::TickComponent(float DeltaTime, ELevelTick TickType,
         return;
     }
 
-    Interference = FMath::FInterpTo(Interference, InterferenceTarget, DeltaTime, InterferenceResponse);
+    // Sources report in their own Tick, which runs before ours (we tick in PostUpdateWork).
+    const float Target = FMath::Max(InterferenceTarget, ReportedThisFrame);
+    ReportedThisFrame = 0.f;
+    Interference = FMath::FInterpTo(Interference, Target, DeltaTime, InterferenceResponse);
 
     // Random glitch bursts, more often the stronger the interference.
     if (Interference > 0.01f && FMath::FRand() < Interference * GlitchRate * DeltaTime)

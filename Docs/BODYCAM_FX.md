@@ -40,14 +40,15 @@ it blinks red when low.
 ## Interference hook
 
 `BodycamLens->SetInterference(0..1)` breaks the picture up: more fringing and grain, colour
-drains out, random glitch bursts where the lens warps. Nothing calls it yet; it's meant for
-anomalies getting close or the fear system, e.g. from an enemy's Tick:
+drains out, random glitch bursts where the lens warps. `ReportInterference(0..1)` is the per-frame
+version for several sources at once (strongest wins); `AGauntAnomaly` uses it. For your own sources,
+e.g. from an enemy's Tick:
 
 ```cpp
 if (AMyFPSPawn* P = Cast<AMyFPSPawn>(UGameplayStatics::GetPlayerPawn(this, 0)))
 {
     const float D = FVector::Dist(GetActorLocation(), P->GetActorLocation());
-    P->GetBodycamLens()->SetInterference(1.f - FMath::Clamp((D - 300.f) / 1500.f, 0.f, 1.f));
+    P->GetBodycamLens()->ReportInterference(1.f - FMath::Clamp((D - 300.f) / 1500.f, 0.f, 1.f));
 }
 ```
 

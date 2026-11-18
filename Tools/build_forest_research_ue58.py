@@ -269,9 +269,15 @@ def build():
             mesh("FR_FencePost_%d_%d"%(x,y),(x,y,95),(14,14,190),"metal")
         mesh("FR_FenceTop_%d"%y,(-980,y,185),(1780,12,15),"metal")
         mesh("FR_FenceBottom_%d"%y,(-980,y,35),(1780,12,12),"metal")
-    # Optional static, nonblocking anomaly preview. Import the OBJ first.
-    preview=lib.load_asset("/Game/Characters/ForestAnomaly/SK_AH_ForestAnomaly_Preview")
-    if preview and preview.get_class().get_name()=="StaticMesh":
+    # The anomaly: the Gaunt (AGauntAnomaly, live AI) in the server area if the C++ class
+    # exists; otherwise the optional static, nonblocking preview. Import the assets first
+    # (Tools/import_gaunt_ue58.py) or it shows as a capsule.
+    gaunt_cls=unreal.load_class(None,"/Script/MyProject5.GauntAnomaly")
+    preview=None if gaunt_cls else lib.load_asset("/Game/Characters/ForestAnomaly/SK_AH_ForestAnomaly_Preview")
+    if gaunt_cls:
+        if actor(gaunt_cls,"FR_Anomaly_Gaunt",(3500,650,100),(0,180,0)):
+            log("Added the Gaunt anomaly (live AI) to the server area.")
+    elif preview and preview.get_class().get_name()=="StaticMesh":
         specimen=actor(unreal.StaticMeshActor,"FR_Anomaly_VisualOnly",
                        (3500,650,0),(0,180,0))
         if specimen:
