@@ -68,12 +68,41 @@ void AGun::BeginPlay()
 {
     Super::BeginPlay();
 
-    // Optional visual-only replacement for the previous imported pistol.
-    // This asset is intentionally not a hard dependency: until it is imported,
-    // the existing visual mesh and hand offsets continue to work unchanged.
-    const FSoftObjectPath OptionalSidearmPath(
-        TEXT("/Game/Generated/Operator/Props/SM_AH_FieldSidearm.SM_AH_FieldSidearm"));
-    if (UStaticMesh* SidearmVisual = Cast<UStaticMesh>(OptionalSidearmPath.TryLoad()))
+    // Visual mesh, best available first. None of these are hard dependencies: whichever
+    // is imported wins, otherwise the constructor's mesh and offsets stay as they are.
+    auto LoadOptionalMesh = [](const TCHAR* PackageName, const TCHAR* ObjectPath) -> UStaticMesh*
+    {
+        // Check first so a missing asset doesn't log a load error every Play.
+        return FPackageName::DoesPackageExist(PackageName)
+            ? Cast<UStaticMesh>(FSoftObjectPath(ObjectPath).TryLoad())
+            : nullptr;
+    };
+
+    // 1. Service pistol (Tools/build_pistol_blender.py -> Tools/import_pistol_ue58.py).
+    //    Unreal cm, +X out of the muzzle, +Y right, +Z up; pivot placed so the grip centre is
+    //    at GripOffset below. All numbers here come from that script.
+    if (UStaticMesh* Pistol = LoadOptionalMesh(
+            TEXT("/Game/Generated/Weapons/SM_AH_ServicePistol"),
+            TEXT("/Game/Generated/Weapons/SM_AH_ServicePistol.SM_AH_ServicePistol")))
+    {
+        MeshComp->SetStaticMesh(Pistol);
+        MeshComp->SetRelativeLocation(FVector(38.f, 9.f, -11.f));
+        MeshComp->SetRelativeRotation(FRotator::ZeroRotator);
+        MeshComp->SetRelativeScale3D(FVector::OneVector);
+
+        GripOffset = FVector(-3.f, 0.f, -7.f);           // centre of the grip
+        GripAxis = FVector(0.33f, 0.f, 0.94f);           // up the raked grip towards the slide
+        SupportHandOffset = FVector(1.f, -3.f, -1.f);    // support hand wraps the firing hand
+        MuzzleOffsetLocal = FVector(14.42f, 0.f, 0.3f);  // bore exit
+
+        UE_LOG(LogTemp, Log, TEXT("AGun: service pistol mesh loaded."));
+        return;
+    }
+
+    // 2. Operator field sidearm prop (Tools/import_operator_sidearm_ue58.py).
+    if (UStaticMesh* SidearmVisual = LoadOptionalMesh(
+            TEXT("/Game/Generated/Operator/Props/SM_AH_FieldSidearm"),
+            TEXT("/Game/Generated/Operator/Props/SM_AH_FieldSidearm.SM_AH_FieldSidearm")))
     {
         MeshComp->SetStaticMesh(SidearmVisual);
 
@@ -88,9 +117,12 @@ void AGun::BeginPlay()
         GripOffset = FVector(-5.f, 0.f, -10.f);
         SupportHandOffset = FVector(21.f, -9.f, 1.f);
         GripAxis = FVector::UpVector;
+        MuzzleOffsetLocal = FVector(42.6f, 0.f, 1.f);    // its barrel tip
 
         UE_LOG(LogTemp, Log, TEXT("AGun: optional operator sidearm visual loaded."));
     }
+
+    // 3. Otherwise: the old Fab pistol from the constructor, if it's in the project.
 }
 
 bool AGun::GetMuzzleTransform(FVector& OutLoc, FRotator& OutRot) const

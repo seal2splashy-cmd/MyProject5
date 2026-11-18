@@ -9,7 +9,9 @@
 ## Classes
 - AMyFPSPawn - APawn with manual movement, stamina, bodycam camera FX, health/death, FP arms, weapon slots
 - AMyGameMode - sets AMyFPSPawn + AMyHUD
-- AGun - pistol: fire/reload/recoil, first-person offset, GetMuzzleAimPoint (crosshair + bullets share it)
+- AGun - pistol: fire/reload/recoil, first-person offset, GetMuzzleAimPoint (crosshair + bullets share it).
+  Mesh: SM_AH_ServicePistol if imported (Tools/build_pistol_blender.py -> Assets/Weapons -> Tools/import_pistol_ue58.py),
+  else the field sidearm prop, else the old Fab pistol; BeginPlay sets grip/muzzle offsets to match
 - ABullet - manual gravity + quadratic drag, sphere-swept collision
 - AEnemy - ACharacter, 4-state FSM, predictive chase with adaptive bias, ragdoll death
 - ASmartEnemy - AEnemy + Q-learning (FQLearningAgent + FPlayerTracker), Saved/QLearning/qtable.json
