@@ -1,0 +1,4 @@
+# High-poly original Meshy source FBXs. These must use Git LFS, not ordinary Git.
+Assets/MeshyForest/*.fbx filter=lfs diff=lfs merge=lfs -text
+# Optional generated Unreal content, after local import and QA.
+Content/ForestResearch/MeshyProps/*.uasset filter=lfs diff=lfs merge=lfs -text
