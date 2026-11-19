@@ -1,7 +1,7 @@
 // AEnemy.h
 // Base enemy: hand-written 4-state FSM (Patrol / Chase / Attack / Dead), layered
-// detection with optional line of sight, predictive chase with a self-correcting
-// bias, point damage, and ragdoll death.
+// detection with line of sight, predictive chase with a self-correcting bias,
+// NavMesh path following, point damage, and ragdoll death.
 // [Rebuilt Oct 2026 from coursework excerpts - same design, names and tuning as the original]
 
 #pragma once
@@ -48,8 +48,12 @@ protected:
 
     // ---- Helpers shared with ASmartEnemy ----
     bool CanDetectPlayer(bool bUpdateMemory = true);
+    /** True if nothing solid is between the eyes and the player (their own gun/arms don't count). */
+    bool HasLineOfSightToPlayer() const;
     void UpdatePlayerObservation(float DeltaTime);
     FVector PredictPlayerLocation();
+    /** Walks towards Target: along a NavMesh path when the level has one, else in a straight line.
+     *  Stops once the remaining distance (along the path) is within StopDist. */
     void MoveTowards(const FVector& Target, float DeltaTime, float StopDist, float SpeedScale = 1.f);
     void FacePlayer(float DeltaTime);
     FVector PickNewPatrolPoint() const;
@@ -76,6 +80,10 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Enemy|Patrol")
     float PatrolAcceptRadius = 120.f;
 
+    /** Seconds before it gives up on a patrol point it can't reach and picks another. */
+    UPROPERTY(EditAnywhere, Category = "Enemy|Patrol")
+    float PatrolGiveUpTime = 15.f;
+
     UPROPERTY(EditAnywhere, Category = "Enemy|Detection")
     float DetectionRadius = 2500.f;
 
@@ -85,9 +93,10 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Enemy|Detection")
     float GiveUpTime = 4.f;
 
-    /** Off by default (documented limitation) - tick it to require real line of sight. */
+    /** Needs a clear view of the player to spot them (walls, crates and doors block it).
+     *  Untick for the old radius-only detection. */
     UPROPERTY(EditAnywhere, Category = "Enemy|Detection")
-    bool bUseLineOfSight = false;
+    bool bUseLineOfSight = true;
 
     UPROPERTY(EditAnywhere, Category = "Enemy|Detection")
     float EyeHeight = 60.f;
@@ -108,6 +117,32 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Enemy|Prediction")
     float LearningRate = 1.5f;
 
+    // ---- Pathfinding ----
+    /** Follow NavMesh paths around walls. Without a NavMesh in the level (or unticked) it walks
+     *  straight at its target like before. Add one with Tools/add_navmesh_ue58.py. */
+    UPROPERTY(EditAnywhere, Category = "Enemy|Pathfinding")
+    bool bUseNavMesh = true;
+
+    /** Re-plan when the target has moved this far since the last plan... */
+    UPROPERTY(EditAnywhere, Category = "Enemy|Pathfinding", meta = (ClampMin = 10))
+    float RepathDistance = 120.f;
+
+    /** ...but not more often than this (seconds)... */
+    UPROPERTY(EditAnywhere, Category = "Enemy|Pathfinding", meta = (ClampMin = 0.05))
+    float MinRepathInterval = 0.25f;
+
+    /** ...and always at least this often, in case something moved into the way. */
+    UPROPERTY(EditAnywhere, Category = "Enemy|Pathfinding", meta = (ClampMin = 0.1))
+    float MaxRepathInterval = 1.5f;
+
+    /** A path corner counts as reached within this distance. */
+    UPROPERTY(EditAnywhere, Category = "Enemy|Pathfinding", meta = (ClampMin = 10))
+    float WaypointAcceptRadius = 60.f;
+
+    /** Draws the current path in the world (green) - handy for testing evidence. */
+    UPROPERTY(EditAnywhere, Category = "Enemy|Pathfinding")
+    bool bDrawDebugPath = false;
+
     /** Optional death animation (played before ragdoll takes over). */
     UPROPERTY(EditAnywhere, Category = "Enemy|Animation")
     TSoftObjectPtr<UAnimationAsset> DyingAnim;
@@ -121,6 +156,7 @@ protected:
 
     FVector SpawnLocation = FVector::ZeroVector;
     FVector CurrentPatrolTarget = FVector::ZeroVector;
+    float PatrolTargetTime = 0.f;
 
     FVector LastSeenPlayerLocation = FVector::ZeroVector;
     float LastSeenTime = -1000.f;
@@ -135,4 +171,18 @@ protected:
 private:
     void EnableRagdoll();
     FTimerHandle TimerHandle_Ragdoll;
+
+    // ---- Path following (see MoveTowards) ----
+    /** Plans a path to Target into PathPoints. False = no NavMesh / no route (caller goes direct). */
+    bool PlanPath(const FVector& Target);
+    void ClearPath();
+    /** Remaining distance along the path from MyLoc, via PathPoints[PathIndex]. */
+    float RemainingPathLength(const FVector& MyLoc) const;
+
+    TArray<FVector> PathPoints;
+    int32 PathIndex = 0;
+    FVector PathGoal = FVector::ZeroVector;
+    float PathPlannedTime = -1000.f;
+    bool bHasPath = false;
+    bool bWarnedNoNavMesh = false;
 };

@@ -11,6 +11,6 @@ public class MyProject5 : ModuleRules
             "InputCore", "EnhancedInput" });
 
         PrivateDependencyModuleNames.AddRange(new string[] {
-            "Json" });
+            "Json", "NavigationSystem" });   // NavigationSystem: AEnemy path following
     }
 }

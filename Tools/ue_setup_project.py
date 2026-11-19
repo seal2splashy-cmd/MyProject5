@@ -518,6 +518,15 @@ def build_level(mats):
         else:
             unreal.log_warning("[MyProject5 setup] enemy class not found - build the C++ first")
 
+    # NavMesh over the whole arena so the enemies path round the walls (AEnemy::MoveTowards).
+    # The editor gives a new volume a 200 cm cube brush: scale = half-size / 100.
+    nav = spawn(unreal.NavMeshBoundsVolume, (0, 0, H / 2))
+    if nav:
+        nav.set_actor_label("NavMeshBounds")
+        nav.set_actor_scale3d(unreal.Vector(S / 200.0 + 1.0, S / 200.0 + 1.0, H / 200.0 + 1.0))
+        unreal.SystemLibrary.execute_console_command(
+            unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world(), "RebuildNavigation")
+
     les.save_current_level()
     log("built " + MAP_PATH)
 

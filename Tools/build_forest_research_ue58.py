@@ -295,6 +295,13 @@ def build():
     if sun:
         comp=sun.get_component_by_class(unreal.DirectionalLightComponent)
         if comp: comp.set_intensity(.35)
+    # NavMesh over the building and the forest outside, so enemies path round walls and trees.
+    # The editor gives a new volume a 200 cm cube brush: scale = half-size / 100.
+    nav=actor(unreal.NavMeshBoundsVolume,"FR_NavMeshBounds",(725,0,175))
+    if nav:
+        nav.set_actor_scale3d(unreal.Vector(33.5,22.5,2.5))   # x -2625..4075, y +/-2250, z -75..425
+        unreal.SystemLibrary.execute_console_command(
+            unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world(),"RebuildNavigation")
     levels.save_current_level()
     log("Saved " + MAP + ". Test Play; original TestArena was not changed.")
     log("Check doorways, collisions, lighting and PIE before making it a startup map.")

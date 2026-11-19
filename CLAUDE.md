@@ -13,7 +13,8 @@
   Mesh, first one imported wins: SM_AH_Pistol (Meshy), SM_AH_ServicePistol (Tools/build_pistol_blender.py),
   the field sidearm prop, the old Fab pistol; BeginPlay sets grip/muzzle offsets to match
 - ABullet - manual gravity + quadratic drag, sphere-swept collision
-- AEnemy - ACharacter, 4-state FSM, predictive chase with adaptive bias, ragdoll death
+- AEnemy - ACharacter, 4-state FSM, predictive chase with adaptive bias, ragdoll death. MoveTowards follows
+  NavMesh paths (falls back to straight lines with no NavMesh), line of sight on (Docs/ENEMY_AI_NAVIGATION.md)
 - ASmartEnemy - AEnemy + Q-learning (FQLearningAgent + FPlayerTracker), Saved/QLearning/qtable.json
 - AGauntAnomaly - ASmartEnemy with the Gaunt's body: rigged SK_AH_Gaunt + clips if imported, else the static
   stand-in with procedural motion; reports bodycam interference when near (Docs/GAUNT_ANOMALY.md)
@@ -33,7 +34,8 @@
 ## Assets
 - Assets/ holds generated WAVs/PNGs (Tools/generate_assets.py); Tools/ue_setup_project.py imports them
   to /Game/Generated, builds materials and /Game/Maps/TestArena. Code loads them by soft path and
-  silently skips anything missing. See README_ASSETS.md.
+  silently skips anything missing. See README_ASSETS.md. Levels need a NavMeshBoundsVolume for enemy
+  pathfinding: both level builders add one; Tools/add_navmesh_ue58.py adds one to the open level.
 - Assets/OperatorArms holds the rigged Anomaly Hunter operator arms FBX + PBR maps (Tools/OperatorArms/README.md).
   If they aren't imported, the pawn falls back to the old Mixamo ArmsMesh.
 - Meshy models: raw downloads go in Assets/Meshy (git-ignored); Tools/prepare_meshy_weapons_blender.py turns
@@ -51,8 +53,7 @@ F torch.
 ## Still to do
 - Fear wobble + one/two-hand grip modes for melee
 - Surface-specific impact sounds (bReturnPhysicalMaterial is already on in the melee sweep)
-- NavMesh pathfinding (enemies use direct-line MoveTowards)
-- Line of sight on by default (bUseLineOfSight)
+- Hearing (gunshots / sprinting alert enemies without line of sight)
 
 ## History
 Source was lost in Oct 2026 and rebuilt from chat history. MyFPSPawn/AGun/MyHUD/MyGameMode are
