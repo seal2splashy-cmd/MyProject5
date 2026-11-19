@@ -10,7 +10,10 @@
 #include "Engine/World.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/DamageType.h"
+#include "DrawDebugHelpers.h"
 #include "Kismet/GameplayStatics.h"
+#include "NavigationPath.h"
+#include "NavigationSystem.h"
 #include "TimerManager.h"
 
 AEnemy::AEnemy()
@@ -88,10 +91,13 @@ void AEnemy::SwitchState(EAIState NewState)
     if (State == NewState) return;
     State = NewState;
 
+    ClearPath();   // whatever we were walking to, the new state picks its own target
+
     switch (State)
     {
     case EAIState::Patrol:
         CurrentPatrolTarget = PickNewPatrolPoint();
+        PatrolTargetTime = GetWorld()->GetTimeSeconds();
         break;
     case EAIState::Chase:
     case EAIState::Attack:
@@ -114,9 +120,14 @@ void AEnemy::HandleState_Patrol(float DeltaTime)
 
     MoveTowards(CurrentPatrolTarget, DeltaTime, PatrolAcceptRadius, 0.5f);
 
-    if (FVector::Dist2D(GetActorLocation(), CurrentPatrolTarget) <= PatrolAcceptRadius)
+    // reached it, or been trying for ages (unreachable / stuck on something): pick another
+    const float Now = GetWorld()->GetTimeSeconds();
+    if (FVector::Dist2D(GetActorLocation(), CurrentPatrolTarget) <= PatrolAcceptRadius ||
+        Now - PatrolTargetTime > PatrolGiveUpTime)
     {
         CurrentPatrolTarget = PickNewPatrolPoint();
+        PatrolTargetTime = Now;
+        ClearPath();
     }
 }
 
@@ -140,7 +151,8 @@ void AEnemy::HandleState_Chase(float DeltaTime)
     const FVector Target = bSeen ? PredictPlayerLocation() : LastSeenPlayerLocation;
     MoveTowards(Target, DeltaTime, AttackRange * 0.8f, 1.f);
 
-    if (FVector::Dist(GetActorLocation(), PlayerPawn->GetActorLocation()) <= AttackRange)
+    // close AND in view - right behind a wall doesn't count, it has to path round first
+    if (bSeen && FVector::Dist(GetActorLocation(), PlayerPawn->GetActorLocation()) <= AttackRange)
     {
         SwitchState(EAIState::Attack);
     }
@@ -148,9 +160,15 @@ void AEnemy::HandleState_Chase(float DeltaTime)
 
 void AEnemy::HandleState_Attack(float DeltaTime)
 {
-    if (!PlayerPawn || !CanDetectPlayer(true))
+    if (!PlayerPawn)
     {
         SwitchState(EAIState::Patrol);
+        return;
+    }
+    if (!CanDetectPlayer(true))
+    {
+        // Ducked behind something: go and look where they were (Chase gives up after GiveUpTime)
+        SwitchState(EAIState::Chase);
         return;
     }
 
@@ -183,18 +201,7 @@ bool AEnemy::CanDetectPlayer(bool bUpdateMemory)
 
     if (Dist <= DetectionRadius)  // primary radius
     {
-        bool bVisible = true;
-        if (bUseLineOfSight)
-        {
-            FHitResult Hit;
-            FCollisionQueryParams Params(SCENE_QUERY_STAT(AEnemyLOS), true, this);
-            Params.AddIgnoredActor(this);
-            Params.AddIgnoredActor(PlayerPawn);
-            const FVector EyeLoc = MyLoc + FVector(0.f, 0.f, EyeHeight);
-            const bool bHit = GetWorld()->LineTraceSingleByChannel(
-                Hit, EyeLoc, PlayerLoc, ECC_Visibility, Params);
-            bVisible = !bHit;
-        }
+        const bool bVisible = !bUseLineOfSight || HasLineOfSightToPlayer();
         if (bVisible && bUpdateMemory)
         {
             LastSeenPlayerLocation = PlayerLoc;
@@ -207,6 +214,39 @@ bool AEnemy::CanDetectPlayer(bool bUpdateMemory)
     if (Dist <= LoseSightRadius && (Now - LastSeenTime) <= GiveUpTime)
         return true;
 
+    return false;
+}
+
+bool AEnemy::HasLineOfSightToPlayer() const
+{
+    if (!PlayerPawn) return false;
+
+    FCollisionQueryParams Params(SCENE_QUERY_STAT(AEnemyLOS), true, this);
+    Params.AddIgnoredActor(this);
+    Params.AddIgnoredActor(PlayerPawn);
+
+    // The player's gun, melee weapon and anything else they're carrying doesn't hide them.
+    TArray<AActor*> Carried;
+    PlayerPawn->GetAttachedActors(Carried, true, true);
+    Params.AddIgnoredActors(Carried);
+
+    // Two rays, to the player's head and chest: peeking over a crate still gets you seen.
+    const FVector EyeLoc = GetActorLocation() + FVector(0.f, 0.f, EyeHeight);
+    const FVector PlayerLoc = PlayerPawn->GetActorLocation();
+    for (const float Up : { 50.f, 0.f })
+    {
+        FHitResult Hit;
+        const FVector To = PlayerLoc + FVector(0.f, 0.f, Up);
+        if (!GetWorld()->LineTraceSingleByChannel(Hit, EyeLoc, To, ECC_Visibility, Params))
+        {
+            return true;
+        }
+        const AActor* Blocker = Hit.GetActor();
+        if (Blocker && (Blocker->GetOwner() == PlayerPawn || Blocker->GetAttachParentActor() == PlayerPawn))
+        {
+            return true;
+        }
+    }
     return false;
 }
 
@@ -250,23 +290,135 @@ FVector AEnemy::PredictPlayerLocation()
 
 void AEnemy::MoveTowards(const FVector& Target, float DeltaTime, float StopDist, float SpeedScale)
 {
-    FVector ToTarget = Target - GetActorLocation();
-    ToTarget.Z = 0.f;
-    const float Dist = ToTarget.Size();
+    const FVector MyLoc = GetActorLocation();
+    UCharacterMovementComponent* Move = GetCharacterMovement();
 
-    if (Dist <= StopDist || Dist <= KINDA_SMALL_NUMBER)
+    if (SpeedScale <= 0.f)   // "stand still" (Q-learning HoldPosition): just brake
     {
-        if (UCharacterMovementComponent* Move = GetCharacterMovement())
+        if (Move)
             Move->Velocity = FMath::VInterpTo(Move->Velocity, FVector::ZeroVector, DeltaTime, 8.f);
         return;
     }
 
-    const FVector Dir = ToTarget / Dist;
-    const float InputScale = FMath::Clamp((Dist - StopDist) / 600.f, 0.25f, 1.0f) * SpeedScale;
+    // Re-plan when the target has moved enough or there's no path yet - but no more often than
+    // MinRepathInterval (the chase target moves every tick, and a target with no route mustn't
+    // cost a path query every frame) - and every MaxRepathInterval anyway.
+    const float Now = GetWorld()->GetTimeSeconds();
+    const float SincePlan = Now - PathPlannedTime;
+    const bool bTargetMoved = FVector::Dist2D(Target, PathGoal) > RepathDistance;
+    if (bUseNavMesh &&
+        (SincePlan > MaxRepathInterval || (SincePlan > MinRepathInterval && (!bHasPath || bTargetMoved))))
+    {
+        PlanPath(Target);
+    }
+
+    // Where to steer now, and how far there is still to go
+    FVector Steer = Target;
+    float Remaining = FVector::Dist2D(MyLoc, Target);
+    if (bHasPath)
+    {
+        // corners we've reached (never skip the last point)
+        while (PathIndex < PathPoints.Num() - 1 &&
+               FVector::Dist2D(MyLoc, PathPoints[PathIndex]) <= WaypointAcceptRadius)
+        {
+            ++PathIndex;
+        }
+        Steer = PathPoints[PathIndex];
+        Remaining = RemainingPathLength(MyLoc);
+
+        if (bDrawDebugPath)
+        {
+            FVector From = MyLoc;
+            for (int32 i = PathIndex; i < PathPoints.Num(); ++i)
+            {
+                DrawDebugLine(GetWorld(), From, PathPoints[i] + FVector(0, 0, 20), FColor::Green, false, -1.f, 0, 3.f);
+                From = PathPoints[i] + FVector(0, 0, 20);
+            }
+        }
+    }
+
+    if (Remaining <= StopDist || Remaining <= KINDA_SMALL_NUMBER)
+    {
+        if (Move)
+            Move->Velocity = FMath::VInterpTo(Move->Velocity, FVector::ZeroVector, DeltaTime, 8.f);
+        return;
+    }
+
+    FVector ToSteer = Steer - MyLoc;
+    ToSteer.Z = 0.f;
+    if (ToSteer.IsNearlyZero())
+    {
+        return;
+    }
+    const FVector Dir = ToSteer.GetSafeNormal();
+    const float InputScale = FMath::Clamp((Remaining - StopDist) / 600.f, 0.25f, 1.0f) * SpeedScale;
     AddMovementInput(Dir, InputScale);
 
-    if (UCharacterMovementComponent* Move = GetCharacterMovement())
+    if (Move)
         Move->MaxWalkSpeed = MoveSpeed * SpeedScale;
+}
+
+bool AEnemy::PlanPath(const FVector& Target)
+{
+    const float Now = GetWorld()->GetTimeSeconds();
+
+    UNavigationSystemV1* Nav = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
+    if (!Nav || !Nav->GetDefaultNavDataInstance())
+    {
+        if (!bWarnedNoNavMesh)
+        {
+            bWarnedNoNavMesh = true;
+            UE_LOG(LogTemp, Warning, TEXT("%s: no NavMesh in this level - walking in straight lines. "
+                "Run Tools/add_navmesh_ue58.py with the level open."), *GetName());
+        }
+        ClearPath();
+        PathGoal = Target;
+        PathPlannedTime = Now;   // don't ask again until the next interval
+        return false;
+    }
+
+    // Flank / retreat / circle targets can land inside a wall: snap them onto the NavMesh first.
+    FVector Goal = Target;
+    FNavLocation OnNav;
+    if (Nav->ProjectPointToNavigation(Target, OnNav, FVector(300.f, 300.f, 250.f)))
+    {
+        Goal = OnNav.Location;
+    }
+
+    UNavigationPath* Path = UNavigationSystemV1::FindPathToLocationSynchronously(GetWorld(), GetActorLocation(), Goal, this);
+    if (!Path || !Path->IsValid() || Path->PathPoints.Num() < 2)
+    {
+        ClearPath();   // no route (e.g. the target is on a roof): fall back to walking straight at it
+        PathGoal = Target;
+        PathPlannedTime = Now;
+        return false;
+    }
+
+    PathPoints = Path->PathPoints;   // [0] is where we are now
+    PathIndex = 1;
+    PathGoal = Target;
+    PathPlannedTime = Now;
+    bHasPath = true;
+    return true;
+}
+
+void AEnemy::ClearPath()
+{
+    PathPoints.Reset();
+    PathIndex = 0;
+    bHasPath = false;
+    PathPlannedTime = -1000.f;
+}
+
+float AEnemy::RemainingPathLength(const FVector& MyLoc) const
+{
+    if (!PathPoints.IsValidIndex(PathIndex)) return 0.f;
+    float Length = FVector::Dist2D(MyLoc, PathPoints[PathIndex]);
+    for (int32 i = PathIndex + 1; i < PathPoints.Num(); ++i)
+    {
+        Length += FVector::Dist2D(PathPoints[i - 1], PathPoints[i]);
+    }
+    return Length;
 }
 
 void AEnemy::FacePlayer(float DeltaTime)
@@ -282,6 +434,19 @@ void AEnemy::FacePlayer(float DeltaTime)
 
 FVector AEnemy::PickNewPatrolPoint() const
 {
+    // On a NavMesh: a random point it can actually walk to (not inside a wall or outside the building)
+    if (bUseNavMesh)
+    {
+        if (UNavigationSystemV1* Nav = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld()))
+        {
+            FNavLocation Point;
+            if (Nav->GetDefaultNavDataInstance() &&
+                Nav->GetRandomReachablePointInRadius(SpawnLocation, PatrolRadius, Point))
+            {
+                return Point.Location;
+            }
+        }
+    }
     const FVector2D R = FMath::RandPointInCircle(PatrolRadius);
     return SpawnLocation + FVector(R.X, R.Y, 0.f);
 }

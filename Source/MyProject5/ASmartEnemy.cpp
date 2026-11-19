@@ -126,7 +126,8 @@ void ASmartEnemy::HandleState_Chase(float DeltaTime)
 
     ExecuteAction(LastAction, DeltaTime);
 
-    if (FVector::Dist(GetActorLocation(), PlayerPawn->GetActorLocation()) <= AttackRange)
+    // close AND in view (not through a wall)
+    if (bSeen && FVector::Dist(GetActorLocation(), PlayerPawn->GetActorLocation()) <= AttackRange)
     {
         SwitchState(EAIState::Attack);
     }
