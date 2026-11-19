@@ -27,6 +27,11 @@
   stand-in with procedural motion; reports bodycam interference when near (Docs/GAUNT_ANOMALY.md)
 - AMyHUD - bodycam REC/timestamp overlay, spread-aware crosshair (fades on ADS), health/stamina bars, ammo + mags,
   death screen
+- AAHInteractable (AHInteractable.h) - base for F-to-use things; the pawn traces from the camera, HUD shows "[F] ..."
+- AAHDoor - single/double hinged door from engine shapes; opens away from you, sprint = slam, enemies open it,
+  noises, locked doors block the NavMesh (Docs/DOORS_PICKUPS.md)
+- AAHPickup - magazine (pouch, max 6) / bandage (heal over time) / torch battery; Tools/place_doors_pickups_ue58.py
+  places doors + pickups in the forest maps
 - AHRealism (RealismUtils) - surface type from a hit (names), per-surface penetration/footstep/impact data,
   generated sound lookup, realistic attenuation (distance low-pass + wall occlusion)
 - AMeleeWeapon - physics melee: spring-damper hand, mouse-steered guard, velocity-based damage
@@ -58,7 +63,7 @@
 ## Controls
 WASD move, Shift sprint, Ctrl crouch (slide while sprinting), Space jump, Q/E head tilt, Z/C lean,
 1 gun, 2 melee (press 2 again to cycle pipe/crowbar/machete/axe). Gun: LMB fire, RMB aim, R reload. Melee: hold RMB + move mouse to steer, LMB thrust.
-F torch.
+F use (doors, pickups), T torch.
 
 ## Still to do
 - One/two-hand grip modes for melee

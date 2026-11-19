@@ -32,6 +32,7 @@ wall, and it can't pinpoint the sound exactly (about 10% of the distance off).
 | Landing from a jump/fall | up to 9 m |
 | Heavy breathing when exhausted | up to 3.5 m |
 | Reload / dry fire / torch click | 3.5 / 2.5 / 1.5 m |
+| Door open / close / slam / locked rattle | 4.5 / 6.5 / 16 / 3.5 m (Docs/DOORS_PICKUPS.md) |
 | Getting hurt (a grunt) | 6 m |
 
 **Search state** (new, between Chase and Patrol): when it hears something, half-sees something or
@@ -122,7 +123,7 @@ HeartbeatVolume.
 |---|---|---|
 | S1 | Walk up behind a patrolling enemy, crouched, torch off | it doesn't turn round until you're within 2.2 m |
 | S2 | Same, standing in a lit corridor | awareness climbs while you're in its cone; it turns to look at 40% |
-| S3 | Torch off in a dark room at 10 m, then switch it on facing it | not seen, then seen at once |
+| S3 | Torch off (T) in a dark room at 10 m, then switch it on facing it | not seen, then seen at once |
 | S4 | Fire a shot in another room | enemies within ~22 m (through walls) come and search near the shot |
 | S5 | Shoot a wall far from you | enemies near the impact go there, not to you |
 | S6 | Sprint past an enemy 8 m away behind a wall | it hears you (debug sphere reaches it) and comes to look |

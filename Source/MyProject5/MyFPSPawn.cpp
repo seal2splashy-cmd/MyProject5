@@ -28,6 +28,7 @@
 #include "BodycamLensComponent.h"
 #include "BodycamTorchComponent.h"
 #include "RealismUtils.h"
+#include "AHInteractable.h"
 
 AMyFPSPawn::AMyFPSPawn()
 {
@@ -326,6 +327,88 @@ void AMyFPSPawn::UpdateBreathing(float DeltaTime)
     {
         AmbienceComponent->SetVolumeMultiplier(AmbienceVolume * AmbienceDuck);
     }
+}
+
+// ------------------------------------------------------------------ interaction
+
+void AMyFPSPawn::UpdateFocus()
+{
+    Focused.Reset();
+    if (bIsDead || !CameraComponent)
+    {
+        return;
+    }
+    // A slightly fat ray so small things (a magazine on the floor) aren't fiddly to pick up
+    const FVector From = CameraComponent->GetComponentLocation();
+    const FVector To = From + CameraComponent->GetForwardVector() * 260.f;
+    FCollisionQueryParams Params(SCENE_QUERY_STAT(InteractTrace), false, this);
+    if (CurrentGun) Params.AddIgnoredActor(CurrentGun);
+    if (Melee && Melee->GetWeapon()) Params.AddIgnoredActor(Melee->GetWeapon());
+
+    FHitResult Hit;
+    if (GetWorld()->SweepSingleByChannel(Hit, From, To, FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(6.f), Params))
+    {
+        AAHInteractable* Thing = Cast<AAHInteractable>(Hit.GetActor());
+        if (Thing && Hit.Distance <= Thing->GetInteractRange())
+        {
+            Focused = Thing;
+        }
+    }
+}
+
+void AMyFPSPawn::Interact()
+{
+    if (bIsDead)
+    {
+        return;
+    }
+    UpdateFocus();
+    if (AAHInteractable* Thing = Focused.Get())
+    {
+        Thing->Interact(this);
+    }
+}
+
+FString AMyFPSPawn::GetInteractPrompt() const
+{
+    const AAHInteractable* Thing = Focused.Get();
+    return Thing ? Thing->GetPrompt(this) : FString();
+}
+
+bool AMyFPSPawn::CanTakeMagazine() const
+{
+    return CurrentGun && CurrentGun->CanAddSpareMag();
+}
+
+bool AMyFPSPawn::TakeMagazine(int32 Rounds)
+{
+    return CurrentGun && CurrentGun->AddSpareMag(Rounds);
+}
+
+bool AMyFPSPawn::CanUseBandage() const
+{
+    return !bIsDead && CurrentHealth + PendingHeal < MaxHealth - 1.f;
+}
+
+bool AMyFPSPawn::UseBandage(float Amount)
+{
+    if (!CanUseBandage())
+    {
+        return false;
+    }
+    // Takes effect over a few seconds, not instantly
+    PendingHeal = FMath::Min(PendingHeal + Amount, MaxHealth - CurrentHealth);
+    return true;
+}
+
+bool AMyFPSPawn::CanTakeBattery() const
+{
+    return Torch && Torch->CanAddBattery();
+}
+
+bool AMyFPSPawn::TakeBattery(float Amount)
+{
+    return Torch && Torch->AddBattery(Amount);
 }
 
 // ------------------------------------------------------------------ fear
@@ -851,6 +934,15 @@ void AMyFPSPawn::Tick(float DeltaTime)
 
     UpdateArmsAnimation();
     UpdateFootsteps();
+    // Bandage working
+    if (PendingHeal > 0.f && !bIsDead)
+    {
+        const float Heal = FMath::Min(PendingHeal, BandageHealRate * DeltaTime);
+        CurrentHealth = FMath::Min(MaxHealth, CurrentHealth + Heal);
+        PendingHeal -= Heal;
+    }
+
+    UpdateFocus();
     UpdateFear(DeltaTime);
     UpdateBreathing(DeltaTime);
     UpdateVisibility(DeltaTime);
@@ -894,8 +986,9 @@ void AMyFPSPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent
     PlayerInputComponent->BindKey(EKeys::One, IE_Pressed, this, &AMyFPSPawn::EquipGun);
     PlayerInputComponent->BindKey(EKeys::Two, IE_Pressed, this, &AMyFPSPawn::EquipMelee);
 
-    // Chest torch
-    PlayerInputComponent->BindKey(EKeys::F, IE_Pressed, this, &AMyFPSPawn::ToggleTorch);
+    // F uses whatever you're looking at (doors, pickups); T is the chest torch
+    PlayerInputComponent->BindKey(EKeys::F, IE_Pressed, this, &AMyFPSPawn::Interact);
+    PlayerInputComponent->BindKey(EKeys::T, IE_Pressed, this, &AMyFPSPawn::ToggleTorch);
 }
 
 void AMyFPSPawn::ToggleTorch()

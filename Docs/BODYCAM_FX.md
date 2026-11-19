@@ -5,7 +5,7 @@ Two components on `AMyFPSPawn`, both in C++:
 | Component | What it does |
 |---|---|
 | `BodycamLens` (`UBodycamLensComponent`) | Sets the camera's own post-process: fisheye-style barrel distortion, colour fringing towards the edges, sensor grain, vignette, washed-out slightly cold colour, bloom, a little motion blur, slow exposure adaptation (walk from the dark into light and it whites out for a moment). |
-| `Torch` (`UBodycamTorchComponent`) | Chest-mounted spot light. Rides with the camera, turns with a little lag, aims where you look (converging at 9 m), shimmers slightly, runs on a battery. **F** toggles it. |
+| `Torch` (`UBodycamTorchComponent`) | Chest-mounted spot light. Rides with the camera, turns with a little lag, aims where you look (converging at 9 m), shimmers slightly, runs on a battery (top it up with battery pickups). **T** toggles it (F is "use"). |
 
 Because it's all on the camera, it works in every map with no setup. It overrides the
 same settings in any Post Process Volume (e.g. TestArena's), and leaves the rest alone.

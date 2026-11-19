@@ -51,6 +51,9 @@ public:
     /** Rounds in the spare magazines. */
     int32 GetReserveAmmo() const;
     int32 GetSpareMagCount() const { return SpareMags.Num(); }
+    bool CanAddSpareMag() const { return SpareMags.Num() < MaxSpareMags; }
+    /** A magazine found in the world goes in the pouch. False if the pouch is full. */
+    bool AddSpareMag(int32 Rounds);
 
     /** World time of the last trigger pull (shot or dry fire). Used for the trigger-finger squeeze. */
     float GetLastFireTime() const { return LastFireTime; }
@@ -105,6 +108,10 @@ private:
     /** Spare magazines in the pouch and how many rounds each holds. */
     UPROPERTY(EditAnywhere, Category = "Gun|Stats")
     TArray<int32> SpareMags = { 12, 12, 12 };
+
+    /** How many spare magazines the pouch holds. */
+    UPROPERTY(EditAnywhere, Category = "Gun|Stats", meta = (ClampMin = 1))
+    int32 MaxSpareMags = 6;
 
     /** Semi-auto: how fast you can realistically pull the trigger. */
     UPROPERTY(EditAnywhere, Category = "Gun|Stats")

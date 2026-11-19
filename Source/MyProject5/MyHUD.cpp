@@ -98,6 +98,29 @@ void AMyHUD::DrawHUD()
     {
         DrawCrosshairAt(ScreenX, ScreenY);
     }
+
+    // What F will do
+    const AMyFPSPawn* ViewPawn = PC ? Cast<AMyFPSPawn>(PC->GetPawn()) : nullptr;
+    if (ViewPawn && !ViewPawn->IsDead())
+    {
+        const FString Prompt = ViewPawn->GetInteractPrompt();
+        if (!Prompt.IsEmpty())
+        {
+            const FString Line = TEXT("[F]  ") + Prompt;
+            UFont* Font = GEngine ? GEngine->GetMediumFont() : nullptr;
+            float W = 0.f, H = 0.f;
+            GetTextSize(Line, W, H, Font, 1.f);
+            const float X = Canvas->SizeX * 0.5f - W * 0.5f;
+            const float Y = Canvas->SizeY * 0.5f + 70.f;
+            DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.45f), X - 10.f, Y - 4.f, W + 20.f, H + 8.f);
+            DrawText(Line, FLinearColor(0.95f, 0.95f, 0.9f, 0.95f), X, Y, Font, 1.f);
+        }
+        if (ViewPawn->IsHealing())
+        {
+            DrawText(TEXT("Bandaging..."), FLinearColor(0.85f, 0.85f, 0.8f, 0.85f), 32.f, Canvas->SizeY - 150.f,
+                GEngine ? GEngine->GetSmallFont() : nullptr, 1.2f);
+        }
+    }
 }
 
 void AMyHUD::DrawBodycamOverlay()

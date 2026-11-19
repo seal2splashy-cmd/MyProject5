@@ -16,6 +16,7 @@ class UBodycamTorchComponent;
 class UAudioComponent;
 class USoundBase;
 class AGun;
+class AAHInteractable;
 
 /**
  * The player. Manual movement (no CharacterMovement), stamina, bodycam camera, FP arms, weapons.
@@ -50,6 +51,21 @@ public:
     float GetVisibility01() const { return Visibility; }
     /** True if the torch is on and Point is inside its beam (the beam itself gives you away). */
     bool IsTorchShiningAt(const FVector& Point) const;
+
+    // ---- Interaction (F): doors, pickups
+    /** "[F] ..." text for the HUD, empty when you're not looking at anything usable. */
+    FString GetInteractPrompt() const;
+    float GetPlanarSpeed() const { return static_cast<float>(PlanarVelocity.Size()); }
+    float GetWalkSpeed() const { return WalkSpeed; }
+    /** True while a bandage is still working. */
+    bool IsHealing() const { return PendingHeal > 0.f; }
+
+    bool CanTakeMagazine() const;
+    bool TakeMagazine(int32 Rounds);
+    bool CanUseBandage() const;
+    bool UseBandage(float Amount);
+    bool CanTakeBattery() const;
+    bool TakeBattery(float Amount);
 
     /** The eyes are the camera (so leaning and crouching move where enemies can see you). */
     virtual FVector GetPawnViewLocation() const override;
@@ -132,7 +148,7 @@ private:
     UPROPERTY(VisibleAnywhere, Category = "Melee")
     UMeleeCombatComponent* Melee;
 
-    // Bodycam look: lens post-process on the camera + chest torch (F)
+    // Bodycam look: lens post-process on the camera + chest torch (T)
     UPROPERTY(VisibleAnywhere, Category = "Bodycam")
     UBodycamLensComponent* BodycamLens;
 
@@ -140,6 +156,19 @@ private:
     UBodycamTorchComponent* Torch;
 
     void ToggleTorch();
+
+    // ---- Interaction
+    void UpdateFocus();
+    void Interact();
+
+    /** What the camera is pointed at, if it's usable and close enough. */
+    TWeakObjectPtr<AAHInteractable> Focused;
+
+    /** Health per second while a bandage works. */
+    UPROPERTY(EditAnywhere, Category = "Health", meta = (ClampMin = 1))
+    float BandageHealRate = 6.f;
+
+    float PendingHeal = 0.f;
 
     uint64 LastFireFrame = 0;
 

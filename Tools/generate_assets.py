@@ -355,6 +355,80 @@ def ricochet(variant):
     return tink + whine
 
 
+def door_open(variant):
+    """Steel door: latch clack, then a short hinge creak as it swings."""
+    seconds = 1.1
+    t = t_axis(seconds)
+    latch = band(rng.standard_normal(len(t)), 1500, 6000) * env_ad(len(t), 0.0005, 0.012) * 1.4
+    latch += _modes(t, 900, [1.0, 2.4], [0.03, 0.02]) * 0.4
+    f = 380 + 60 * variant + 120 * np.sin(2 * np.pi * 1.3 * t)
+    creak = np.sign(np.sin(2 * np.pi * np.cumsum(f) / SR)) * 0.25
+    creak = band(creak, 300, 3000) * np.clip((t - 0.12) / 0.1, 0, 1) * np.exp(-np.clip(t - 0.2, 0, None) / 0.35)
+    return room_tail(latch + creak * (0.7 if variant else 0.45), seconds=0.5, tau=0.14, mix=0.25)
+
+
+def door_close():
+    """Steel door shutting: a heavy thunk and the latch catching."""
+    seconds = 0.9
+    t = t_axis(seconds)
+    thunk = lowpass(rng.standard_normal(len(t)), 250) * env_ad(len(t), 0.002, 0.06) * 2.0
+    thunk += _modes(t, 110, [1.0, 2.7, 4.1], [0.12, 0.07, 0.04], [1, .5, .3]) * 0.8
+    latch = np.roll(band(rng.standard_normal(len(t)), 1800, 6000) * env_ad(len(t), 0.0005, 0.01), int(SR * 0.03))
+    return room_tail(thunk + latch, seconds=0.7, tau=0.2, mix=0.3)
+
+
+def door_slam():
+    """A steel door flung open into its stop: a big boom and a ringing rattle."""
+    seconds = 1.6
+    t = t_axis(seconds)
+    boom = lowpass(rng.standard_normal(len(t)), 300) * env_ad(len(t), 0.001, 0.09) * 2.5
+    ring = _modes(t, 140, [1.0, 2.3, 3.8, 5.9], [0.4, 0.25, 0.15, 0.1], [1, .6, .4, .3]) * 0.9
+    rattle = band(rng.standard_normal(len(t)), 2000, 7000) * env_ad(len(t), 0.002, 0.12) * 0.4
+    return room_tail(boom + ring + rattle, seconds=1.0, tau=0.3, mix=0.35)
+
+
+def door_locked():
+    """Trying a locked door: the handle and latch rattling twice against the strike."""
+    seconds = 0.8
+    t = t_axis(seconds)
+    x = np.zeros_like(t)
+    for start in (0.0, 0.18, 0.36):
+        clack = band(rng.standard_normal(len(t)), 1200, 5000) * env_ad(len(t), 0.0005, 0.015)
+        clack += _modes(t, 700, [1.0, 2.2], [0.03, 0.02]) * 0.3
+        x += np.roll(clack, int(SR * start)) * (1.0 if start == 0.0 else 0.75)
+    return room_tail(x, seconds=0.4, tau=0.12, mix=0.2)
+
+
+def pickup_mag():
+    """Picking up a pistol magazine: a metallic clack and it sliding into the pouch."""
+    seconds = 0.6
+    t = t_axis(seconds)
+    clack = _modes(t, 1400, [1.0, 2.1, 3.3], [0.04, 0.03, 0.02]) * 0.7
+    clack += highpass(rng.standard_normal(len(t)), 3000) * env_ad(len(t), 0.0003, 0.006)
+    slide = band(rng.standard_normal(len(t)), 800, 4000) * env_ad(len(t), 0.05, 0.12) * 0.3
+    return clack + np.roll(slide, int(SR * 0.12))
+
+
+def pickup_bandage():
+    """Tearing a bandage wrapper open and unrolling it."""
+    seconds = 1.0
+    t = t_axis(seconds)
+    tear = band(rng.standard_normal(len(t)), 1500, 8000) * env_ad(len(t), 0.02, 0.15) * 0.8
+    tear *= 1 + 0.6 * np.sign(np.sin(2 * np.pi * 37 * t))
+    rustle = band(rng.standard_normal(len(t)), 600, 4000) * env_ad(len(t), 0.2, 0.3) * 0.3
+    return tear + np.roll(rustle, int(SR * 0.2))
+
+
+def pickup_gear():
+    """Generic gear: the torch battery clicking in."""
+    seconds = 0.5
+    t = t_axis(seconds)
+    out = band(rng.standard_normal(len(t)), 1500, 6000) * env_ad(len(t), 0.0005, 0.01)
+    snap = np.roll(_modes(t, 2100, [1.0, 2.6], [0.02, 0.015]) * 0.6
+                   + highpass(rng.standard_normal(len(t)), 3500) * env_ad(len(t), 0.0003, 0.005), int(SR * 0.18))
+    return out + snap
+
+
 def heartbeat_loop(bpm=66, beats=9):
     """Your own heartbeat as you hear it when scared: a low lub-DUB thump, felt more than heard.
     Loops seamlessly; the game pitches it up to speed it up."""
@@ -439,6 +513,15 @@ def build_realism_audio():
         save_wav(f"SW_Ricochet_0{v + 1}", ricochet(v), peak=0.7)
     save_wav("SW_Breath_Heavy_Loop", breath_heavy_loop(), peak=0.7)
     save_wav("SW_Heartbeat_Loop", heartbeat_loop(), peak=0.85)
+    # doors and pickups
+    save_wav("SW_Door_Open_01", door_open(0))
+    save_wav("SW_Door_Open_02", door_open(1))
+    save_wav("SW_Door_Close_01", door_close())
+    save_wav("SW_Door_Slam_01", door_slam())
+    save_wav("SW_Door_Locked_01", door_locked(), peak=0.8)
+    save_wav("SW_Pickup_Mag_01", pickup_mag(), peak=0.7)
+    save_wav("SW_Pickup_Bandage_01", pickup_bandage(), peak=0.6)
+    save_wav("SW_Pickup_Gear_01", pickup_gear(), peak=0.7)
 
 
 # ============================================================ texture helpers

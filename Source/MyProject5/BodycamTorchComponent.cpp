@@ -41,6 +41,16 @@ void UBodycamTorchComponent::BeginPlay()
     PowerAlpha = bTorchOn ? 1.f : 0.f;
 }
 
+bool UBodycamTorchComponent::AddBattery(float Amount)
+{
+    if (!CanAddBattery() || Amount <= 0.f)
+    {
+        return false;
+    }
+    Battery = FMath::Min(1.f, Battery + Amount);
+    return true;
+}
+
 void UBodycamTorchComponent::Toggle()
 {
     SetTorchOn(!bTorchOn);

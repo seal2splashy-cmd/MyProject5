@@ -26,6 +26,9 @@ public:
     bool  IsTorchOn() const   { return bTorchOn; }
     float GetBattery01() const { return Battery; }
     bool  IsBatteryLow() const { return Battery < LowBatteryLevel; }
+    bool  CanAddBattery() const { return bUseBattery && Battery < 0.97f; }
+    /** Swap in a found battery (adds Amount of a full charge). False if it's already full. */
+    bool  AddBattery(float Amount);
 
     virtual void BeginPlay() override;
     virtual void TickComponent(float DeltaTime, ELevelTick TickType,

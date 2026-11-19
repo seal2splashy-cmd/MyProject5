@@ -178,6 +178,16 @@ int32 AGun::GetReserveAmmo() const
     return Total;
 }
 
+bool AGun::AddSpareMag(int32 Rounds)
+{
+    if (!CanAddSpareMag() || Rounds <= 0)
+    {
+        return false;
+    }
+    SpareMags.Add(FMath::Min(Rounds, MagSize));
+    return true;
+}
+
 void AGun::SetHandling(float InAimAlpha, float InMove01, bool bInAir, float InFatigue01, bool bInCrouched)
 {
     AimAlpha = FMath::Clamp(InAimAlpha, 0.f, 1.f);
