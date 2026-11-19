@@ -126,10 +126,10 @@ void UBodycamLensComponent::ApplySettings()
 
     S.SceneFringeIntensity = ChromaticAberration * (1.f + 2.f * I) + 4.f * G;
     S.ChromaticAberrationStartOffset = FMath::Lerp(ChromaticAberrationStart, 0.f, FMath::Max(I, G));
-    S.FilmGrainIntensity = FMath::Clamp(FilmGrain + 0.45f * I + 0.5f * G, 0.f, 1.f);
-    S.VignetteIntensity = Vignette + 0.25f * I;
+    S.FilmGrainIntensity = FMath::Clamp(FilmGrain + 0.45f * I + 0.5f * G + 0.12f * Stress, 0.f, 1.f);
+    S.VignetteIntensity = Vignette + 0.25f * I + 0.4f * Stress;   // fear narrows the view
 
-    const float Sat = Saturation * (1.f - 0.55f * I) * (1.f - 0.4f * G);
+    const float Sat = Saturation * (1.f - 0.55f * I) * (1.f - 0.4f * G) * (1.f - 0.25f * Stress);
     S.ColorSaturation = FVector4(Sat, Sat, Sat, 1.f);
     S.ColorContrast = FVector4(Contrast, Contrast, Contrast, 1.f);
     S.SceneColorTint = Tint;

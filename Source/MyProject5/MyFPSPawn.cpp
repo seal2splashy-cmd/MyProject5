@@ -4,6 +4,7 @@
 #include "Components/InputComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "AEnemy.h"
 #include "AGun.h"
 #include "MeleeCombatComponent.h"
@@ -86,6 +87,7 @@ AMyFPSPawn::AMyFPSPawn()
     HurtSound      = Snd(TEXT("SW_Player_Hurt"));
     AmbienceSound  = Snd(TEXT("SW_Ambience_BodycamHiss_Loop"));
     BreathSound    = Snd(TEXT("SW_Breath_Heavy_Loop"));
+    HeartbeatSound = Snd(TEXT("SW_Heartbeat_Loop"));
 
     AutoPossessPlayer = EAutoReceiveInput::Player0;
     bUseControllerRotationYaw = true;
@@ -147,6 +149,11 @@ void AMyFPSPawn::BeginPlay()
     if (USoundBase* Breath = BreathSound.LoadSynchronous())
     {
         BreathComponent = UGameplayStatics::SpawnSound2D(this, Breath, 0.01f, 1.f, 0.f, nullptr, false, false);
+    }
+    // Heartbeat loop: only heard when you're scared; faster (pitched up) the more scared you are
+    if (USoundBase* Heart = HeartbeatSound.LoadSynchronous())
+    {
+        HeartbeatComponent = UGameplayStatics::SpawnSound2D(this, Heart, 0.01f, 1.f, 0.f, nullptr, false, false);
     }
 }
 
@@ -296,7 +303,7 @@ void AMyFPSPawn::UpdateBreathing(float DeltaTime)
     // Heavier the more tired (and the more hurt) you are; builds fast, settles slowly
     const float Tired = 1.f - Stamina / FMath::Max(MaxStamina, 1.f);
     const float Hurt = 1.f - CurrentHealth / FMath::Max(MaxHealth, 1.f);
-    const float Target = bIsDead ? 0.f : FMath::Clamp(Tired * 1.25f - 0.15f + Hurt * 0.35f, 0.f, 1.f);
+    const float Target = bIsDead ? 0.f : FMath::Clamp(Tired * 1.25f - 0.15f + Hurt * 0.35f + Fear * 0.4f, 0.f, 1.f);
     BreathLevel = FMath::FInterpTo(BreathLevel, Target, DeltaTime, Target > BreathLevel ? 1.2f : 0.25f);
 
     if (BreathComponent)
@@ -319,6 +326,69 @@ void AMyFPSPawn::UpdateBreathing(float DeltaTime)
     {
         AmbienceComponent->SetVolumeMultiplier(AmbienceVolume * AmbienceDuck);
     }
+}
+
+// ------------------------------------------------------------------ fear
+
+void AMyFPSPawn::UpdateFear(float DeltaTime)
+{
+    // What's scaring you, checked a few times a second
+    FearScanTimer -= DeltaTime;
+    if (FearScanTimer <= 0.f)
+    {
+        FearScanTimer = 0.25f;
+
+        // Something hunting you nearby is the worst; something searching close by, or just
+        // wandering right next to you in the dark, less so.
+        float Threat = 0.f;
+        const FVector Me = GetActorLocation();
+        for (TActorIterator<AEnemy> It(GetWorld()); It; ++It)
+        {
+            const AEnemy* Enemy = *It;
+            if (!Enemy || Enemy->IsDead())
+            {
+                continue;
+            }
+            const float Dist = static_cast<float>(FVector::Dist(Enemy->GetActorLocation(), Me));
+            if (Dist > FearEnemyRange)
+            {
+                continue;
+            }
+            const float Close = 1.f - Dist / FMath::Max(FearEnemyRange, 1.f);
+            float Weight = 0.f;
+            switch (Enemy->GetState())
+            {
+            case EAIState::Chase:
+            case EAIState::Attack: Weight = 0.35f + 0.65f * Close; break;
+            case EAIState::Search: Weight = 0.45f * Close; break;
+            default:               Weight = 0.2f * Close * Close; break;
+            }
+            Threat = FMath::Max(Threat, Weight);
+        }
+
+        const float Presence = BodycamLens ? BodycamLens->GetInterference() * 0.9f : 0.f;   // the Gaunt's pull
+        const float Dark = Visibility < 0.25f ? 0.15f : 0.f;
+        const float Hurt = 1.f - CurrentHealth / FMath::Max(MaxHealth, 1.f);
+        FearTarget = bIsDead ? 0.f : FMath::Clamp(FMath::Max(Threat, Presence) + Dark + Hurt * 0.35f, 0.f, 1.f);
+    }
+
+    // Builds fast, fades slowly - your heart keeps going for a while after a scare
+    if (FearTarget > Fear)
+        Fear = FMath::Min(FearTarget, Fear + FearRiseRate * DeltaTime);
+    else
+        Fear = FMath::Max(FearTarget, Fear - FearFallRate * DeltaTime);
+
+    if (HeartbeatComponent)
+    {
+        const float Audible = FMath::SmoothStep(0.15f, 0.7f, Fear);
+        HeartbeatComponent->SetVolumeMultiplier(FMath::Max(0.01f, HeartbeatVolume * Audible));
+        HeartbeatComponent->SetPitchMultiplier(1.f + 0.6f * Fear);   // ~66 bpm calm -> ~105 bpm terrified
+    }
+    if (BodycamLens)
+    {
+        BodycamLens->SetStress(Fear);
+    }
+    FearWobbleTime += DeltaTime * (5.f + 7.f * Fear);
 }
 
 // ------------------------------------------------------------------ arms
@@ -774,13 +844,14 @@ void AMyFPSPawn::Tick(float DeltaTime)
         CurrentGun->SetHandling(AimAlpha,
             PlanarSpeed / FMath::Max(RunSpeed, 1.f),
             !bIsOnGround,
-            1.f - Stamina / FMath::Max(MaxStamina, 1.f),
+            FMath::Max(1.f - Stamina / FMath::Max(MaxStamina, 1.f), Fear * 0.7f),   // shaking hands count too
             bIsCrouching);
         CurrentGun->ApplyFirstPersonOffset(SwayCurrentLoc, SwayCurrentRot);
     }
 
     UpdateArmsAnimation();
     UpdateFootsteps();
+    UpdateFear(DeltaTime);
     UpdateBreathing(DeltaTime);
     UpdateVisibility(DeltaTime);
 }
@@ -1126,6 +1197,14 @@ void AMyFPSPawn::UpdateGunSway(float DeltaTime)
 
     // Breathing tips the muzzle too (this is what moves the crosshair when aimed)
     DesiredRot.Pitch += FMath::Sin(IdleSwayTime * 1.4f + 0.6f) * 0.15f * BreathAmp;
+
+    // Fear: a fine tremor in the hands that aiming only partly steadies
+    if (Fear > 0.01f)
+    {
+        const float Shake = FearAimWobbleDeg * Fear * Fear * FMath::Lerp(1.f, 0.6f, AimAlpha) / FMath::Max(AimScale, 0.01f);
+        DesiredRot.Pitch += FMath::PerlinNoise1D(FearWobbleTime) * Shake;
+        DesiredRot.Yaw   += FMath::PerlinNoise1D(FearWobbleTime + 51.3f) * Shake;
+    }
 
     SwayTargetRot  = DesiredRot * AimScale;
     SwayCurrentRot = FMath::RInterpTo(SwayCurrentRot, SwayTargetRot, DeltaTime, InterpSpeed);

@@ -60,12 +60,13 @@ heavier and lower, it sees better in the dark (11 m) and hears 30% better.
   - play the hit sound for whatever they land on
 
 ## 3. Player movement + body (`AMyFPSPawn`)
-- **Real speeds**: walk 2.3 m/s, sprint 5.2 m/s, crouch 1.3 m/s (it was 9 and 18 m/s before).
-  Enemies chase at 4-4.5 m/s, so sprinting outruns them, until your stamina runs out after about 5 s.
+- **Speeds**: walk 3 m/s, sprint 6.5 m/s, crouch 1.65 m/s (it was 9 and 18 m/s before; the first
+  realism pass went down to 2.3 and 5.2, which felt too slow). Enemies chase at 4-4.5 m/s, so
+  sprinting outruns them, until your stamina runs out after about 5 s.
 - **Momentum**: you speed up and slow down over a few tenths of a second, keep your momentum in
   the air, and lose the speed going into a wall.
 - **Footstep-paced head bob**: one bob per step, with steps paced by the distance you actually
-  walk (75 cm walking, 125 cm sprinting), so cadence follows speed. Your weight shifts side to side.
+  walk (110 cm walking, 165 cm sprinting), so cadence follows speed. Your weight shifts side to side.
 - **Per-surface footsteps** on concrete, metal, wood, dirt, grass and foliage.
 - **Fall damage**: drops over about 4 m hurt and about 15 m kills. A hard landing also knocks the
   wind out of you.
@@ -74,6 +75,22 @@ heavier and lower, it sees better in the dark (11 m) and hears 30% better.
 - **Less cartoon camera**: turn roll is 3 degrees (was 25), strafe roll 1.5 (was 15), and sprinting
   widens the FOV by 3 (was 20). A chest camera doesn't zoom.
 - Fixed a drift where the camera's sideways jitter accumulated every frame.
+
+## Fear (`AMyFPSPawn::UpdateFear`)
+Fear builds fast and fades slowly. It comes from:
+- an enemy hunting you nearby (the worst), searching nearby, or just wandering right next to you
+- the Gaunt's presence (the bodycam interference)
+- standing in the dark
+- being badly hurt
+
+What it does:
+- **Heartbeat**: fades in from about 15% fear, and speeds up from ~66 to ~105 bpm.
+- **Hands shake**: the aim wobbles (aiming only partly steadies it) and spread widens.
+- **Breathing** quickens.
+- **The picture narrows**: more vignette, a bit grainier and greyer.
+
+Tune it under Fear on the pawn: FearEnemyRange, FearRiseRate / FearFallRate, FearAimWobbleDeg,
+HeartbeatVolume.
 
 ## 4. Audio + bodycam look
 - **Realistic 3D sound** (`AHRealism::PlayAt`): sounds get quieter and duller with distance as air
@@ -90,7 +107,7 @@ heavier and lower, it sees better in the dark (11 m) and hears 30% better.
 ## New sounds
 `python Tools/generate_assets.py` (or only the new ones: `build_realism_audio()`):
 `SW_Footstep_Metal/Wood/Dirt/Grass_*`, `SW_Impact_Concrete/Metal/Wood/Dirt/Glass/Flesh_*`,
-`SW_Ricochet_*`, `SW_Breath_Heavy_Loop`. They're already generated in `Assets/Audio`; run
+`SW_Ricochet_*`, `SW_Breath_Heavy_Loop`, `SW_Heartbeat_Loop`. They're already generated in `Assets/Audio`; run
 `Tools/ue_setup_project.py` to import them (every `*_Loop` is set to loop).
 
 ## Debugging (console, ` key)
@@ -120,3 +137,4 @@ heavier and lower, it sees better in the dark (11 m) and hears 30% better.
 | M2 | Drop from ~5 m | some damage; from 15 m: death |
 | M3 | Sprint until empty | breathing builds, then settles over ~10 s |
 | M4 | Lean into a wall | camera stops at the wall |
+| F1 | Let an enemy chase you, then hide | heartbeat fades in fast, aim shakes; ~10 s after it loses you the heart slows and fades |

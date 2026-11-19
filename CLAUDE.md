@@ -7,7 +7,8 @@
 - Legacy input (axis/action mappings in Config/DefaultInput.ini + direct BindKey calls)
 
 ## Classes
-- AMyFPSPawn - APawn with manual movement (real-world speeds + momentum), stamina, breathing, fall damage,
+- AMyFPSPawn - APawn with manual movement (walk 3 / sprint 6.5 m/s + momentum), stamina, breathing, fear
+  (heartbeat, hand tremor, vignette - from hunting enemies, the Gaunt, darkness, wounds), fall damage,
   per-surface footsteps (noise for enemies), lean collision, GetVisibility01 (light + torch) for enemy eyes,
   bodycam camera FX, health/death, FP arms, weapon slots (Docs/REALISM.md)
 - AMyGameMode - sets AMyFPSPawn + AMyHUD
@@ -60,7 +61,7 @@ WASD move, Shift sprint, Ctrl crouch (slide while sprinting), Space jump, Q/E he
 F torch.
 
 ## Still to do
-- Fear wobble + one/two-hand grip modes for melee
+- One/two-hand grip modes for melee
 - Room reverb volumes (sounds have baked room tails for now), rolling-shutter lens effect
 
 ## History

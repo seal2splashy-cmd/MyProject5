@@ -53,6 +53,9 @@ public:
     /** A shot was fired: the sensor whites out for a moment and flares, then recovers. */
     void OnGunshot();
 
+    /** 0..1 fear from the pawn: the picture narrows (vignette), drains a little and gets grainier. */
+    void SetStress(float Stress01) { Stress = FMath::Clamp(Stress01, 0.f, 1.f); }
+
     /**
      * Where a point from ProjectWorldLocationToScreen actually shows up once the lens has
      * warped the picture. Use it for anything the HUD draws over the world (the crosshair).
@@ -152,4 +155,5 @@ private:
     float CurrentDistortion = 0.f;   // what the material is using this frame
     float TurnBlur = 0.f;            // 0..1, smoothed
     float Flash = 0.f;               // 1 at a gunshot, decays in ~0.15 s
+    float Stress = 0.f;              // fear, set by the pawn
 };

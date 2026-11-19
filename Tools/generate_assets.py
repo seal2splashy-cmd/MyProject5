@@ -355,6 +355,27 @@ def ricochet(variant):
     return tink + whine
 
 
+def heartbeat_loop(bpm=66, beats=9):
+    """Your own heartbeat as you hear it when scared: a low lub-DUB thump, felt more than heard.
+    Loops seamlessly; the game pitches it up to speed it up."""
+    period = 60.0 / bpm
+    seconds = period * beats
+    n = int(SR * seconds)
+    out = np.zeros(n)
+    def thump(f0, tau, amp):
+        t = t_axis(0.25)
+        x = np.sin(2 * np.pi * np.cumsum(f0 * (1 + 0.6 * np.exp(-t * 40))) / SR) * np.exp(-t / tau)
+        x += lowpass(rng.standard_normal(len(t)), 120) * np.exp(-t / (tau * 0.6)) * 0.3
+        return x * amp
+    lub, dub = thump(48, 0.05, 1.0), thump(58, 0.04, 0.75)
+    for b in range(beats):
+        i = int(SR * b * period)
+        out[i:i + len(lub)] += lub[: n - i]
+        j = i + int(SR * 0.28)
+        out[j:j + len(dub)] += dub[: max(0, n - j)]
+    return lowpass(out, 400)
+
+
 def breath_heavy_loop(seconds=8.0, rate_hz=0.95):
     """Out-of-breath panting heard from inside the head: breathy noise shaped into in/out
     breaths (out louder and lower), a little throat rasp. Loops seamlessly."""
@@ -417,6 +438,7 @@ def build_realism_audio():
         save_wav(f"SW_Impact_Flesh_0{v + 1}", impact_flesh(v))
         save_wav(f"SW_Ricochet_0{v + 1}", ricochet(v), peak=0.7)
     save_wav("SW_Breath_Heavy_Loop", breath_heavy_loop(), peak=0.7)
+    save_wav("SW_Heartbeat_Loop", heartbeat_loop(), peak=0.85)
 
 
 # ============================================================ texture helpers
