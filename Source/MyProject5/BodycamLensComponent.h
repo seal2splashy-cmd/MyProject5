@@ -47,6 +47,12 @@ public:
 
     float GetInterference() const { return Interference; }
 
+    /** How fast the camera is turning (degrees/s). Fast turns smear like a real low-shutter bodycam. */
+    void SetCameraMotion(float AngularSpeedDegPerSec);
+
+    /** A shot was fired: the sensor whites out for a moment and flares, then recovers. */
+    void OnGunshot();
+
     /**
      * Where a point from ProjectWorldLocationToScreen actually shows up once the lens has
      * warped the picture. Use it for anything the HUD draws over the world (the crosshair).
@@ -96,6 +102,17 @@ public:
     UPROPERTY(EditAnywhere, Category = "Bodycam|Lens", meta = (ClampMin = "0", ClampMax = "1"))
     float MotionBlur = 0.35f;
 
+    /** Extra motion blur at a fast whip-turn (FastTurnSpeed degrees/s or more). */
+    UPROPERTY(EditAnywhere, Category = "Bodycam|Lens", meta = (ClampMin = "0", ClampMax = "1"))
+    float TurnMotionBlur = 0.45f;
+
+    UPROPERTY(EditAnywhere, Category = "Bodycam|Lens", meta = (ClampMin = "30"))
+    float FastTurnSpeed = 360.f;
+
+    /** How bright the picture flashes on a gunshot (extra colour gain at the peak). */
+    UPROPERTY(EditAnywhere, Category = "Bodycam|Lens", meta = (ClampMin = "0", ClampMax = "4"))
+    float GunshotFlash = 1.2f;
+
     /** Exposure adaptation speed, dark -> bright. Lower = longer white-out. (UE default 3) */
     UPROPERTY(EditAnywhere, Category = "Bodycam|Lens", meta = (ClampMin = "0.02", ClampMax = "20"))
     float ExposureSpeedUp = 0.6f;
@@ -133,4 +150,6 @@ private:
     float Glitch = 0.f;          // 1 at the start of a burst, decays fast
     float GlitchPhase = 0.f;
     float CurrentDistortion = 0.f;   // what the material is using this frame
+    float TurnBlur = 0.f;            // 0..1, smoothed
+    float Flash = 0.f;               // 1 at a gunshot, decays in ~0.15 s
 };

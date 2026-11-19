@@ -7,18 +7,27 @@
 - Legacy input (axis/action mappings in Config/DefaultInput.ini + direct BindKey calls)
 
 ## Classes
-- AMyFPSPawn - APawn with manual movement, stamina, bodycam camera FX, health/death, FP arms, weapon slots
+- AMyFPSPawn - APawn with manual movement (real-world speeds + momentum), stamina, breathing, fall damage,
+  per-surface footsteps (noise for enemies), lean collision, GetVisibility01 (light + torch) for enemy eyes,
+  bodycam camera FX, health/death, FP arms, weapon slots (Docs/REALISM.md)
 - AMyGameMode - sets AMyFPSPawn + AMyHUD
-- AGun - pistol: fire/reload/recoil, first-person offset, GetMuzzleAimPoint (crosshair + bullets share it).
+- AGun - pistol: real mags + chamber, tactical/empty reloads, spread cone, stacking upward recoil, ADS pose,
+  muzzle flash light, gunshot noise; first-person offset, GetMuzzleAimPoint (crosshair + bullets share it).
   Mesh, first one imported wins: SM_AH_Pistol (Meshy), SM_AH_ServicePistol (Tools/build_pistol_blender.py),
   the field sidearm prop, the old Fab pistol; BeginPlay sets grip/muzzle offsets to match
-- ABullet - manual gravity + quadratic drag, sphere-swept collision
-- AEnemy - ACharacter, 4-state FSM, predictive chase with adaptive bias, ragdoll death. MoveTowards follows
-  NavMesh paths (falls back to straight lines with no NavMesh), line of sight on (Docs/ENEMY_AI_NAVIGATION.md)
+- ABullet - manual gravity + quadratic drag, sphere-swept collision, penetration (wood/sheet metal/glass/leaves),
+  ricochets, hit zones, per-surface impact sounds + noise
+- AEnemy - ACharacter, FSM Patrol/Chase/Attack/Search/Dead, vision cone + lighting + awareness meter, hearing
+  (static AEnemy::ReportNoise), own footsteps, predictive chase with adaptive bias, ragdoll death. MoveTowards
+  follows NavMesh paths (straight lines with no NavMesh) (Docs/ENEMY_AI_NAVIGATION.md, Docs/REALISM.md).
+  Console: ah.DebugSenses 1, ah.DebugNoise 1
 - ASmartEnemy - AEnemy + Q-learning (FQLearningAgent + FPlayerTracker), Saved/QLearning/qtable.json
 - AGauntAnomaly - ASmartEnemy with the Gaunt's body: rigged SK_AH_Gaunt + clips if imported, else the static
   stand-in with procedural motion; reports bodycam interference when near (Docs/GAUNT_ANOMALY.md)
-- AMyHUD - dynamic crosshair, health/stamina bars, ammo, death screen
+- AMyHUD - bodycam REC/timestamp overlay, spread-aware crosshair (fades on ADS), health/stamina bars, ammo + mags,
+  death screen
+- AHRealism (RealismUtils) - surface type from a hit (names), per-surface penetration/footstep/impact data,
+  generated sound lookup, realistic attenuation (distance low-pass + wall occlusion)
 - AMeleeWeapon - physics melee: spring-damper hand, mouse-steered guard, velocity-based damage
 - UMeleeCombatComponent - glue between pawn and melee weapon, holds the weapon list
 - AMeleePipe / AMeleeCrowbar / AMeleeMachete / AMeleeFireAxe (MeleeWeaponTypes) - built from engine shapes,
@@ -52,8 +61,7 @@ F torch.
 
 ## Still to do
 - Fear wobble + one/two-hand grip modes for melee
-- Surface-specific impact sounds (bReturnPhysicalMaterial is already on in the melee sweep)
-- Hearing (gunshots / sprinting alert enemies without line of sight)
+- Room reverb volumes (sounds have baked room tails for now), rolling-shutter lens effect
 
 ## History
 Source was lost in Oct 2026 and rebuilt from chat history. MyFPSPawn/AGun/MyHUD/MyGameMode are

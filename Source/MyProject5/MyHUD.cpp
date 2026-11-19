@@ -7,6 +7,8 @@
 #include "Engine/Engine.h"
 #include "Engine/Font.h"
 #include "Kismet/GameplayStatics.h"
+#include "Misc/DateTime.h"
+#include "Camera/PlayerCameraManager.h"
 
 void AMyHUD::DrawHUD()
 {
@@ -17,6 +19,13 @@ void AMyHUD::DrawHUD()
     float ScreenX = Canvas->SizeX * 0.5f;
     float ScreenY = Canvas->SizeY * 0.5f;
     bool bDrawCrosshair = true;
+    CrosshairGapPx = 0.f;
+    CrosshairAlpha = 1.f;
+
+    if (bShowBodycamOverlay)
+    {
+        DrawBodycamOverlay();
+    }
 
     APlayerController* PC = GetOwningPlayerController();
     if (PC)
@@ -57,12 +66,22 @@ void AMyHUD::DrawHUD()
                         ScreenY = ScreenPos.Y;
                     }
 
+                    // Open the crosshair to the gun's real accuracy cone; fade it out as the sights come up
+                    float FOV = 90.f;
+                    if (PC->PlayerCameraManager)
+                    {
+                        FOV = PC->PlayerCameraManager->GetFOVAngle();
+                    }
+                    const float PxPerDeg = Canvas->SizeX / FMath::Max(FOV, 1.f);
+                    CrosshairGapPx = Gun->GetCurrentSpreadDeg() * PxPerDeg;
+                    CrosshairAlpha = 1.f - FMath::Clamp((Gun->GetAimAlpha() - 0.5f) * 2.f, 0.f, 1.f);
+
                     // Ammo, bottom right
                     const FString Ammo = Gun->IsReloading()
                         ? FString(TEXT("RELOADING"))
-                        : FString::Printf(TEXT("%d / %d"), Gun->GetAmmoInMag(), Gun->GetReserveAmmo());
+                        : FString::Printf(TEXT("%d | %d  (%d mags)"), Gun->GetAmmoInMag(), Gun->GetReserveAmmo(), Gun->GetSpareMagCount());
                     DrawText(Ammo, FLinearColor(1.f, 1.f, 1.f, 0.8f),
-                        Canvas->SizeX - 160.f, Canvas->SizeY - 64.f, GEngine ? GEngine->GetMediumFont() : nullptr);
+                        Canvas->SizeX - 230.f, Canvas->SizeY - 64.f, GEngine ? GEngine->GetMediumFont() : nullptr);
                 }
             }
 
@@ -75,37 +94,69 @@ void AMyHUD::DrawHUD()
         }
     }
 
-    if (bDrawCrosshair)
+    if (bDrawCrosshair && CrosshairAlpha > 0.01f)
     {
         DrawCrosshairAt(ScreenX, ScreenY);
     }
+}
+
+void AMyHUD::DrawBodycamOverlay()
+{
+    // What real body-worn cameras burn into the corner of their footage
+    UFont* Font = GEngine ? GEngine->GetSmallFont() : nullptr;
+    const FDateTime Now = FDateTime::Now();
+    const FString Stamp = FString::Printf(TEXT("%04d-%02d-%02d  %02d:%02d:%02d"),
+        Now.GetYear(), Now.GetMonth(), Now.GetDay(), Now.GetHour(), Now.GetMinute(), Now.GetSecond());
+
+    const float Right = Canvas->SizeX - 24.f;
+    float W = 0.f, H = 0.f;
+    GetTextSize(Stamp, W, H, Font, 1.2f);
+    const float X = Right - W;
+    const float Y = 22.f;
+
+    const FLinearColor Text(0.95f, 0.95f, 0.92f, 0.85f);
+    DrawText(Stamp, Text, X, Y, Font, 1.2f);
+    DrawText(CameraUnitId, Text, X, Y + H + 2.f, Font, 1.2f);
+
+    // REC with a blinking red dot
+    const bool bOn = FMath::Fmod(GetWorld()->GetTimeSeconds(), 1.0) < 0.6;
+    float RW = 0.f, RH = 0.f;
+    GetTextSize(TEXT("REC"), RW, RH, Font, 1.2f);
+    const float RecX = X - RW - 26.f;
+    if (bOn)
+    {
+        DrawRect(FLinearColor(0.9f, 0.05f, 0.05f, 0.9f), RecX - 14.f, Y + RH * 0.5f - 4.f, 8.f, 8.f);
+    }
+    DrawText(TEXT("REC"), Text, RecX, Y, Font, 1.2f);
 }
 
 void AMyHUD::DrawCrosshairAt(float X, float Y)
 {
     if (!Canvas) return;
 
-    const float Inner = LineGap;
-    const float Outer = LineGap + LineLength;
+    const float Inner = LineGap + CrosshairGapPx;
+    const float Outer = Inner + LineLength;
+    const FLinearColor OutlineColorNow(OutlineColor.R, OutlineColor.G, OutlineColor.B, OutlineColor.A * CrosshairAlpha);
+    const FLinearColor CrosshairColorNow(CrosshairColor.R, CrosshairColor.G, CrosshairColor.B, CrosshairColor.A * CrosshairAlpha);
 
     // Outline pass
-    DrawLine(X - Outer, Y, X - Inner, Y, OutlineColor, OutlineThickness);
-    DrawLine(X + Inner, Y, X + Outer, Y, OutlineColor, OutlineThickness);
-    DrawLine(X, Y - Outer, X, Y - Inner, OutlineColor, OutlineThickness);
-    DrawLine(X, Y + Inner, X, Y + Outer, OutlineColor, OutlineThickness);
+    DrawLine(X - Outer, Y, X - Inner, Y, OutlineColorNow, OutlineThickness);
+    DrawLine(X + Inner, Y, X + Outer, Y, OutlineColorNow, OutlineThickness);
+    DrawLine(X, Y - Outer, X, Y - Inner, OutlineColorNow, OutlineThickness);
+    DrawLine(X, Y + Inner, X, Y + Outer, OutlineColorNow, OutlineThickness);
 
     // Fill pass
-    DrawLine(X - Outer, Y, X - Inner, Y, CrosshairColor, LineThickness);
-    DrawLine(X + Inner, Y, X + Outer, Y, CrosshairColor, LineThickness);
-    DrawLine(X, Y - Outer, X, Y - Inner, CrosshairColor, LineThickness);
-    DrawLine(X, Y + Inner, X, Y + Outer, CrosshairColor, LineThickness);
+    DrawLine(X - Outer, Y, X - Inner, Y, CrosshairColorNow, LineThickness);
+    DrawLine(X + Inner, Y, X + Outer, Y, CrosshairColorNow, LineThickness);
+    DrawLine(X, Y - Outer, X, Y - Inner, CrosshairColorNow, LineThickness);
+    DrawLine(X, Y + Inner, X, Y + Outer, CrosshairColorNow, LineThickness);
 
     // Centre dot outline
-    DrawRect(OutlineColor,
+    DrawRect(OutlineColorNow,
         X - DotRadius - 1.f, Y - DotRadius - 1.f,
         (DotRadius + 1.f) * 2.f, (DotRadius + 1.f) * 2.f);
     // Centre dot fill
-    DrawRect(CrosshairColor,
+    DrawRect(CrosshairColorNow,
         X - DotRadius, Y - DotRadius,
         DotRadius * 2.f, DotRadius * 2.f);
 }

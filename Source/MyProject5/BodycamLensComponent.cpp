@@ -50,6 +50,21 @@ void UBodycamLensComponent::ReportInterference(float Amount01)
     ReportedThisFrame = FMath::Max(ReportedThisFrame, FMath::Clamp(Amount01, 0.f, 1.f));
 }
 
+void UBodycamLensComponent::SetCameraMotion(float AngularSpeedDegPerSec)
+{
+    const float Target = FMath::Clamp(AngularSpeedDegPerSec / FMath::Max(FastTurnSpeed, 1.f), 0.f, 1.f);
+    const UWorld* W = GetWorld();
+    const float Dt = W ? W->GetDeltaSeconds() : 0.016f;
+    TurnBlur = FMath::FInterpTo(TurnBlur, Target, Dt, Target > TurnBlur ? 14.f : 5.f);
+}
+
+void UBodycamLensComponent::OnGunshot()
+{
+    Flash = 1.f;
+    Glitch = FMath::Max(Glitch, 0.25f);   // a little sensor tearing from the shock
+    GlitchPhase = FMath::FRandRange(0.f, 2.f * UE_PI);
+}
+
 void UBodycamLensComponent::TickComponent(float DeltaTime, ELevelTick TickType,
     FActorComponentTickFunction* ThisTickFunction)
 {
@@ -72,6 +87,7 @@ void UBodycamLensComponent::TickComponent(float DeltaTime, ELevelTick TickType,
     }
     Glitch = FMath::FInterpTo(Glitch, 0.f, DeltaTime, 9.f);
     GlitchPhase += DeltaTime * 45.f;
+    Flash = FMath::FInterpTo(Flash, 0.f, DeltaTime, 18.f);
 
     ApplySettings();
 }
@@ -93,6 +109,7 @@ void UBodycamLensComponent::ApplySettings()
     S.bOverride_MotionBlurAmount = bOn;
     S.bOverride_AutoExposureSpeedUp = bOn;
     S.bOverride_AutoExposureSpeedDown = bOn;
+    S.bOverride_ColorGain = bOn;
 
     if (!bOn)
     {
@@ -116,8 +133,11 @@ void UBodycamLensComponent::ApplySettings()
     S.ColorSaturation = FVector4(Sat, Sat, Sat, 1.f);
     S.ColorContrast = FVector4(Contrast, Contrast, Contrast, 1.f);
     S.SceneColorTint = Tint;
-    S.BloomIntensity = Bloom;
-    S.MotionBlurAmount = MotionBlur;
+    S.BloomIntensity = Bloom * (1.f + 2.f * Flash);
+    S.MotionBlurAmount = FMath::Clamp(MotionBlur + TurnMotionBlur * TurnBlur, 0.f, 1.f);
+    // gunshot: the cheap sensor whites out for a couple of frames
+    const float Gain = 1.f + GunshotFlash * Flash;
+    S.ColorGain = FVector4(Gain, Gain * 0.97f, Gain * 0.9f, 1.f);
     S.AutoExposureSpeedUp = ExposureSpeedUp;
     S.AutoExposureSpeedDown = ExposureSpeedDown;
 
