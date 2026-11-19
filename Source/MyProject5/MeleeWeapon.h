@@ -124,6 +124,34 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "Melee|Look")
 	TArray<TSoftObjectPtr<UMaterialInterface>> PartMaterials;
 
+	// ---------- Imported model (optional) ----------
+	/**
+	 * A real model shown instead of the engine-shape parts once it's imported (e.g. from Meshy via
+	 * Tools/prepare_meshy_weapons_blender.py). Pivot at the end of the handle, handle along +X.
+	 * If it isn't imported the shapes are used, so nothing breaks.
+	 */
+	UPROPERTY(EditAnywhere, Category = "Melee|Model")
+	TSoftObjectPtr<UStaticMesh> ModelMesh;
+
+	/** Hands and striking surface while the model is shown (its grip can sit elsewhere than the shapes'). */
+	UPROPERTY(EditAnywhere, Category = "Melee|Model")
+	float ModelMainHandOffset = 12.f;
+
+	UPROPERTY(EditAnywhere, Category = "Melee|Model")
+	float ModelSecondHandOffset = 2.f;
+
+	UPROPERTY(EditAnywhere, Category = "Melee|Model")
+	FVector ModelBladeBase = FVector(25.f, 0.f, 0.f);
+
+	UPROPERTY(EditAnywhere, Category = "Melee|Model")
+	FVector ModelBladeTip = FVector(90.f, 0.f, 0.f);
+
+	UPROPERTY(VisibleAnywhere, Category = "Melee|Model")
+	TObjectPtr<UStaticMeshComponent> ModelComp;
+
+	/** True when the imported model is in use instead of the shapes. */
+	bool bUsingModel = false;
+
 	// ---------- Audio ----------
 	UPROPERTY(EditAnywhere, Category = "Melee|Audio")
 	TArray<TSoftObjectPtr<USoundBase>> WhooshSounds;
@@ -290,6 +318,7 @@ private:
 	float LastImpactSoundTime = -10.f;
 
 	void ApplyLook();
+	void ApplyModel();
 	void PlayRandom(const TArray<TSoftObjectPtr<USoundBase>>& Sounds, const FVector& Where, float Volume, float Pitch);
 
 	void CacheBladeLocals();

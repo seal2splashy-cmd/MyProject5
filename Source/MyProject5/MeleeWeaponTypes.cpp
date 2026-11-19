@@ -1,6 +1,7 @@
 // MeleeWeaponTypes.cpp
 
 #include "MeleeWeaponTypes.h"
+#include "Engine/StaticMesh.h"
 
 namespace MeleeLook
 {
@@ -44,6 +45,14 @@ AMeleePipe::AMeleePipe()
 
 	MainHandOffset = 12.f;     // both hands on the taped end
 	SecondHandOffset = 2.f;
+
+	// Meshy model (Tools/prepare_meshy_weapons_blender.py -> Tools/import_meshy_weapons_ue58.py):
+	// 92 cm, taped 11.5-34.5 cm from the butt. Used automatically once imported.
+	ModelMesh = TSoftObjectPtr<UStaticMesh>(FSoftObjectPath(TEXT("/Game/Generated/Weapons/SM_AH_Pipe.SM_AH_Pipe")));
+	ModelMainHandOffset = 28.f;
+	ModelSecondHandOffset = 17.f;
+	ModelBladeBase = FVector(37.5f, 0.f, 0.f);
+	ModelBladeTip = FVector(91.f, 0.f, 0.f);
 
 	MassKg = 1.8f;
 	Stiffness = 950.f;

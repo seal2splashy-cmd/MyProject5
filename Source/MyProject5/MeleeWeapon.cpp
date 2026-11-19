@@ -1,6 +1,8 @@
 // MeleeWeapon.cpp
 
 #include "MeleeWeapon.h"
+#include "AEnemy.h"
+#include "RealismUtils.h"
 
 #include "Camera/CameraComponent.h"
 #include "Components/SceneComponent.h"
@@ -16,6 +18,7 @@
 #include "Materials/MaterialInterface.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Sound/SoundBase.h"
+#include "Misc/PackageName.h"
 
 AMeleeWeapon::AMeleeWeapon()
 {
@@ -36,6 +39,14 @@ AMeleeWeapon::AMeleeWeapon()
 	Mesh->SetGenerateOverlapEvents(false);
 	Mesh->CastShadow = false;
 	Parts.Add(Mesh);
+
+	// Optional imported model (see ModelMesh); hidden until one is found.
+	ModelComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Model"));
+	ModelComp->SetupAttachment(Root);
+	ModelComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	ModelComp->SetGenerateOverlapEvents(false);
+	ModelComp->CastShadow = false;
+	ModelComp->SetVisibility(false);
 	PartColours.Add(FLinearColor(0.35f, 0.33f, 0.30f));
 	PartMaterials.Add(TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(TEXT("/Game/Generated/Materials/M_RustMetal.M_RustMetal"))));
 
@@ -118,8 +129,43 @@ void AMeleeWeapon::SetBladePoints(const FVector& Base, const FVector& Tip)
 void AMeleeWeapon::BeginPlay()
 {
 	Super::BeginPlay();
+	ApplyModel();          // may move the hands and blade points, so before caching them
 	CacheBladeLocals();
 	ApplyLook();
+}
+
+void AMeleeWeapon::ApplyModel()
+{
+	bUsingModel = false;
+	UStaticMesh* Model = nullptr;
+	if (!ModelMesh.IsNull())
+	{
+		Model = ModelMesh.Get();
+		if (!Model && FPackageName::DoesPackageExist(ModelMesh.GetLongPackageName()))
+		{
+			Model = ModelMesh.LoadSynchronous();
+		}
+	}
+	if (!Model || !ModelComp)
+	{
+		return;   // keep the engine-shape look
+	}
+
+	ModelComp->SetStaticMesh(Model);
+	ModelComp->SetRelativeTransform(FTransform::Identity);
+	ModelComp->SetVisibility(true);
+	for (UStaticMeshComponent* Part : Parts)
+	{
+		if (Part)
+		{
+			Part->SetVisibility(false);
+		}
+	}
+
+	MainHandOffset = ModelMainHandOffset;
+	SecondHandOffset = ModelSecondHandOffset;
+	SetBladePoints(ModelBladeBase, ModelBladeTip);
+	bUsingModel = true;
 }
 
 void AMeleeWeapon::ApplyLook()
@@ -153,7 +199,7 @@ void AMeleeWeapon::PlayRandom(const TArray<TSoftObjectPtr<USoundBase>>& Sounds, 
 	if (Sounds.Num() == 0) return;
 	if (USoundBase* Sound = Sounds[FMath::RandRange(0, Sounds.Num() - 1)].LoadSynchronous())
 	{
-		UGameplayStatics::PlaySoundAtLocation(this, Sound, Where, Volume * SoundVolume, Pitch);
+		AHRealism::PlayAt(this, Sound, Where, Volume * SoundVolume, Pitch, 2500.f);
 	}
 }
 
@@ -493,7 +539,25 @@ void AMeleeWeapon::HandleHit(const FHitResult& Hit, const FVector& PointVel)
 		LastImpactSoundTime = NowTime;
 		const float Volume = FMath::Clamp(ImpactSpeed / 1200.f, 0.2f, 1.f);
 		const float Pitch = FMath::Clamp(1.2f - 0.1f * MassKg, 0.7f, 1.25f) * FMath::FRandRange(0.92f, 1.08f);
-		PlayRandom(bFlesh ? FleshHitSounds : HardHitSounds, Hit.ImpactPoint, Volume, Pitch);
+		const AHRealism::ESurface Surface = AHRealism::SurfaceFromHit(Hit);
+		USoundBase* SurfaceSound = nullptr;
+		if (!bFlesh && Surface != AHRealism::ESurface::Metal)
+		{
+			// Only metal clangs: wood knocks, concrete thuds, dirt/grass thump.
+			const AHRealism::FSurfaceInfo& Info = AHRealism::Info(Surface);
+			SurfaceSound = AHRealism::RandomVariant(Info.ImpactSound, Info.ImpactVariants);
+		}
+		if (SurfaceSound)
+		{
+			AHRealism::PlayAt(this, SurfaceSound, Hit.ImpactPoint, Volume * SoundVolume, Pitch * 0.9f, 2500.f);
+		}
+		else
+		{
+			PlayRandom(bFlesh ? FleshHitSounds : HardHitSounds, Hit.ImpactPoint, Volume, Pitch);
+		}
+
+		// A pipe ringing off a wall carries; a soft hit doesn't.
+		AEnemy::ReportNoise(this, Hit.ImpactPoint, FMath::Lerp(400.f, 1600.f, Volume) * (bFlesh ? 0.6f : 1.f), GetOwner());
 	}
 
 	OnMeleeImpact.Broadcast(Hit, ImpactSpeed, bFlesh);
