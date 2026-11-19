@@ -111,9 +111,9 @@ void ASmartEnemy::HandleState_Chase(float DeltaTime)
     const float Now = GetWorld()->GetTimeSeconds();
     if (!bSeen && (Now - LastSeenTime) > GiveUpTime)
     {
-        // lost them: that last action earned the lost-sight penalty
+        // lost them: that last action earned the lost-sight penalty; go and look where they were
         PendingReward += PenaltyLostSight;
-        SwitchState(EAIState::Patrol);
+        BeginSearch(LastSeenPlayerLocation, true);
         return;
     }
 
@@ -126,7 +126,8 @@ void ASmartEnemy::HandleState_Chase(float DeltaTime)
 
     ExecuteAction(LastAction, DeltaTime);
 
-    if (FVector::Dist(GetActorLocation(), PlayerPawn->GetActorLocation()) <= AttackRange)
+    // close AND in view (not through a wall)
+    if (bSeen && FVector::Dist(GetActorLocation(), PlayerPawn->GetActorLocation()) <= AttackRange)
     {
         SwitchState(EAIState::Attack);
     }

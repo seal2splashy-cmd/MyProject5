@@ -1,0 +1,29 @@
+# Stylised research anomaly placeholder materials
+newmtl Suit
+Kd 0.105 0.140 0.145
+Ka 0.01 0.02 0.02
+Ns 25
+
+newmtl Ceramic
+Kd 0.440 0.500 0.490
+Ka 0.04 0.05 0.05
+Ns 70
+
+newmtl Faceplate
+Kd 0.018 0.023 0.027
+Ka 0.01 0.01 0.01
+Ns 180
+
+newmtl Polymer
+Kd 0.033 0.046 0.051
+Ka 0.01 0.01 0.01
+Ns 22
+
+newmtl Straps
+Kd 0.18 0.22 0.22
+Ns 30
+
+newmtl Sensor
+Kd 0.07 0.67 0.73
+Ka 0.02 0.14 0.15
+Ns 120

@@ -6,9 +6,11 @@
 
 /**
  * Minimal bodycam HUD:
- *  - dynamic crosshair that follows the gun muzzle's projected aim point (screen centre fallback)
+ *  - the body camera's own burn-in, top right: blinking REC, date/time, unit number
+ *  - dynamic crosshair that follows the gun muzzle's projected aim point (screen centre fallback),
+ *    opening up with the gun's current spread and fading out when you aim down the sights
  *  - health bar (green > 60%, amber 30-60%, red < 30%) and stamina bar, bottom left
- *  - ammo readout, death screen
+ *  - ammo readout (rounds ready / in spare mags), death screen
  */
 UCLASS()
 class MYPROJECT5_API AMyHUD : public AHUD
@@ -43,8 +45,20 @@ private:
     UPROPERTY(EditAnywhere, Category = "Crosshair")
     float OutlineThickness = 3.5f;
 
+    /** The timestamp / REC overlay real body cameras burn into their footage. */
+    UPROPERTY(EditAnywhere, Category = "Bodycam")
+    bool bShowBodycamOverlay = true;
+
+    UPROPERTY(EditAnywhere, Category = "Bodycam")
+    FString CameraUnitId = TEXT("AH-BC 0417");
+
+    float CrosshairGapPx = 0.f;     // extra gap from the gun's spread, this frame
+    float CrosshairAlpha = 1.f;
+
     void DrawCrosshairAt(float ScreenX, float ScreenY);
     void DrawHealthBar(float Health, float MaxHealth);
     void DrawStaminaBar(float Stamina, float MaxStamina);
+    void DrawTorchBattery(float Battery01, bool bTorchOn, bool bLow);
     void DrawDeathScreen(float TimeSinceDeath);
+    void DrawBodycamOverlay();
 };

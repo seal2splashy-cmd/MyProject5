@@ -17,3 +17,12 @@ Tools/OperatorArms/AnomalyHunter_Operator_AssetPack/
 Tools/OperatorArms/Exports/
 __pycache__/
 *.pyc
+
+# Forest anomaly Blender exports (regenerate with Tools/build_forest_anomaly_blender.py)
+Tools/Exports/
+
+# Raw Mixamo downloads for the Gaunt (merged into Assets/Anomaly/Gaunt/Rigged by Tools/rig_gaunt_from_mixamo_blender.py)
+Assets/Anomaly/Gaunt/Mixamo/
+
+# Raw Meshy downloads (processed into Assets/Weapons by Tools/prepare_meshy_weapons_blender.py)
+Assets/Meshy/

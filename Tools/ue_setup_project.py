@@ -66,11 +66,14 @@ def import_folder(src_dir, dst_path, exts):
 
 
 def fix_audio():
-    loop = AUDIO_DST + "/SW_Ambience_BodycamHiss_Loop"
-    if eal.does_asset_exist(loop):
-        wave = eal.load_asset(loop)
-        try_set(wave, "looping", True)
-        eal.save_loaded_asset(wave)
+    # Every *_Loop wave loops (bodycam hiss, breathing)
+    for path in eal.list_assets(AUDIO_DST, recursive=False, include_folder=False):
+        name = path.split(".")[0].split("/")[-1]
+        if name.endswith("_Loop"):
+            wave = eal.load_asset(path.split(".")[0])
+            if wave:
+                try_set(wave, "looping", True)
+                eal.save_loaded_asset(wave)
 
 
 def fix_textures(src_dir=None, dst=TEX_DST):
@@ -100,10 +103,28 @@ def tex(name, folder=TEX_DST):
 
 
 def new_material(name, folder=MAT_DST):
+    """Empty material at folder/name. An existing one is cleared and reused rather than
+    deleted, so maps that already use it keep their assignments."""
     path = folder + "/" + name
     if eal.does_asset_exist(path):
+        mat = eal.load_asset(path)
+        if isinstance(mat, unreal.Material):
+            mel.delete_all_material_expressions(mat)
+            return mat
         eal.delete_asset(path)
     return asset_tools.create_asset(name, folder, unreal.Material, unreal.MaterialFactoryNew())
+
+
+def mask(mat, r, g, b, x, y):
+    """Component mask with ALL four channels set explicitly. A new mask node defaults to
+    R+G on, so setting only the wanted channel gave 2-3 component outputs and the
+    AppendVector below failed to compile ("Can't append LWCVector2 to LWCVector3")."""
+    m = mel.create_material_expression(mat, unreal.MaterialExpressionComponentMask, x, y)
+    m.set_editor_property("r", r)
+    m.set_editor_property("g", g)
+    m.set_editor_property("b", b)
+    m.set_editor_property("a", False)
+    return m
 
 
 def world_uv(mat, tile_cm, x, y):
@@ -111,16 +132,12 @@ def world_uv(mat, tile_cm, x, y):
     floors use (X, Y), walls use (X+Y, Z) - one of X/Y is constant along any axis-aligned wall."""
     wp = mel.create_material_expression(mat, unreal.MaterialExpressionWorldPosition, x - 900, y)
 
-    mask_xy = mel.create_material_expression(mat, unreal.MaterialExpressionComponentMask, x - 700, y - 80)
-    mask_xy.set_editor_property("r", True); mask_xy.set_editor_property("g", True)
+    mask_xy = mask(mat, True, True, False, x - 700, y - 80)
     mel.connect_material_expressions(wp, "", mask_xy, "")
 
-    mask_x = mel.create_material_expression(mat, unreal.MaterialExpressionComponentMask, x - 700, y + 20)
-    mask_x.set_editor_property("r", True)
-    mask_y = mel.create_material_expression(mat, unreal.MaterialExpressionComponentMask, x - 700, y + 100)
-    mask_y.set_editor_property("g", True)
-    mask_z = mel.create_material_expression(mat, unreal.MaterialExpressionComponentMask, x - 700, y + 180)
-    mask_z.set_editor_property("b", True)
+    mask_x = mask(mat, True, False, False, x - 700, y + 20)
+    mask_y = mask(mat, False, True, False, x - 700, y + 100)
+    mask_z = mask(mat, False, False, True, x - 700, y + 180)
     for m in (mask_x, mask_y, mask_z):
         mel.connect_material_expressions(wp, "", m, "")
 
@@ -133,8 +150,7 @@ def world_uv(mat, tile_cm, x, y):
     mel.connect_material_expressions(mask_z, "", wall_uv, "B")
 
     nrm = mel.create_material_expression(mat, unreal.MaterialExpressionVertexNormalWS, x - 700, y + 280)
-    nz = mel.create_material_expression(mat, unreal.MaterialExpressionComponentMask, x - 560, y + 280)
-    nz.set_editor_property("b", True)
+    nz = mask(mat, False, False, True, x - 560, y + 280)
     mel.connect_material_expressions(nrm, "", nz, "")
     nz_abs = mel.create_material_expression(mat, unreal.MaterialExpressionAbs, x - 440, y + 280)
     mel.connect_material_expressions(nz, "", nz_abs, "")
@@ -505,6 +521,15 @@ def build_level(mats):
         else:
             unreal.log_warning("[MyProject5 setup] enemy class not found - build the C++ first")
 
+    # NavMesh over the whole arena so the enemies path round the walls (AEnemy::MoveTowards).
+    # The editor gives a new volume a 200 cm cube brush: scale = half-size / 100.
+    nav = spawn(unreal.NavMeshBoundsVolume, (0, 0, H / 2))
+    if nav:
+        nav.set_actor_label("NavMeshBounds")
+        nav.set_actor_scale3d(unreal.Vector(S / 200.0 + 1.0, S / 200.0 + 1.0, H / 200.0 + 1.0))
+        unreal.SystemLibrary.execute_console_command(
+            unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world(), "RebuildNavigation")
+
     les.save_current_level()
     log("built " + MAP_PATH)
 
@@ -527,7 +552,16 @@ def main():
         task.enter_progress_frame(1, "Building TestArena")
         build_level(mats)
         task.enter_progress_frame(1, "Done")
+    # Bodycam lens material + torch click, service pistol (separate scripts so they can run on their own too)
+    import runpy
+    for extra in ("build_bodycam_fx_ue58.py", "import_pistol_ue58.py", "import_meshy_weapons_ue58.py", "import_meshy_arms_ue58.py",
+                  "import_gaunt_ue58.py"):
+        extra_script = os.path.join(PROJECT_DIR, "Tools", extra)
+        if os.path.isfile(extra_script):
+            runpy.run_path(extra_script, run_name="__main__")
     log("All done - press Play in /Game/Maps/TestArena")
 
 
-main()
+# Other tools (e.g. rebuild_materials_ue58.py) load this file just for its functions.
+if not globals().get("MYPROJECT5_SETUP_AS_LIBRARY"):
+    main()
