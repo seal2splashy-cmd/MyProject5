@@ -66,11 +66,14 @@ def import_folder(src_dir, dst_path, exts):
 
 
 def fix_audio():
-    loop = AUDIO_DST + "/SW_Ambience_BodycamHiss_Loop"
-    if eal.does_asset_exist(loop):
-        wave = eal.load_asset(loop)
-        try_set(wave, "looping", True)
-        eal.save_loaded_asset(wave)
+    # Every *_Loop wave loops (bodycam hiss, breathing)
+    for path in eal.list_assets(AUDIO_DST, recursive=False, include_folder=False):
+        name = path.split(".")[0].split("/")[-1]
+        if name.endswith("_Loop"):
+            wave = eal.load_asset(path.split(".")[0])
+            if wave:
+                try_set(wave, "looping", True)
+                eal.save_loaded_asset(wave)
 
 
 def fix_textures(src_dir=None, dst=TEX_DST):

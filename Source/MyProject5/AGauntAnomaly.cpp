@@ -55,6 +55,12 @@ AGauntAnomaly::AGauntAnomaly()
     AttackRange = 175.f;
     EyeHeight = 80.f;
 
+    // Something that lives in the dark: sees better in it, hears better, heavy slow steps.
+    DarkSightRange = 1100.f;
+    HearingScale = 1.3f;
+    FootstepPitch = 0.68f;
+    FootstepVolume = 0.9f;
+
     StandInMesh = GauntAsset<UStaticMesh>(TEXT(""), TEXT("SM_AH_Gaunt"));
     RiggedMesh  = GauntAsset<USkeletalMesh>(TEXT(""), TEXT("SK_AH_Gaunt"));
     IdleAnim    = GauntAsset<UAnimationAsset>(TEXT("/Anims"), TEXT("A_Gaunt_Idle"));

@@ -4,7 +4,7 @@ Audio and textures in `Assets/` are made by code (free to use, easy to regenerat
 
 | Folder | What | Made by |
 |---|---|---|
-| `Assets/Audio` | 18 WAVs: melee whooshes, flesh/metal hits, gunshot, dry fire, reload, 4 footsteps, hurt, looping bodycam hiss | `Tools/generate_assets.py` |
+| `Assets/Audio` | 50 WAVs: melee whooshes, flesh/metal hits, gunshot, dry fire, reload, footsteps on concrete/metal/wood/dirt/grass, bullet impacts per surface, ricochets, hurt, looping bodycam hiss and heavy breathing | `Tools/generate_assets.py` |
 | `Assets/Textures` | 8 tileable PNGs: concrete, rusted metal, wood, floor tiles (+ normals, rust roughness) | `Tools/generate_assets.py` |
 | `Assets/OperatorArms` | Rigged first-person operator arms FBX + 2K PBR maps | Anomaly Hunter pack, rigged by `Tools/OperatorArms/rig_and_export_fbx_fixed.py` |
 | `Assets/OperatorArmsMeshy` | The arms the game uses: Meshy gloved forearms/hands on the operator rig + 2K maps | `Tools/build_meshy_arms_blender.py` ([Docs/OPERATOR_ARMS_MESHY.md](Docs/OPERATOR_ARMS_MESHY.md)) |

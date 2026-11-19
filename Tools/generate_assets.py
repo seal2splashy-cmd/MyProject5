@@ -223,6 +223,160 @@ def player_hurt():
     return thump * 1.5 + ring + muffled
 
 
+
+# ---------------------------------------------------------------- surfaces (realism pass)
+
+def _modes(t, base, ratios, decays, amps=None):
+    """Sum of decaying sine partials - the ring of a struck object."""
+    x = np.zeros_like(t)
+    for i, (r, d) in enumerate(zip(ratios, decays)):
+        a = 1.0 if amps is None else amps[i]
+        x += a * np.sin(2 * np.pi * base * r * (1 + rng.uniform(-0.01, 0.01)) * t + rng.uniform(0, 6.28)) * np.exp(-t / d)
+    return x
+
+
+def footstep_metal(variant):
+    """Boot on steel plate / grating: a clank with a short metallic ring."""
+    seconds = 0.5
+    t = t_axis(seconds)
+    heel = lowpass(noise(seconds), 350) * env_ad(len(t), 0.001, 0.02) * 2.0
+    ring = _modes(t, 520 + 70 * variant, [1.0, 2.3, 3.9, 5.6], [0.09, 0.06, 0.04, 0.03], [1, .6, .4, .25]) * 0.5
+    rattle = band(noise(seconds), 2500, 8000) * env_ad(len(t), 0.002, 0.03) * 0.4
+    toe = np.roll(heel * 0.6 + ring * 0.4, int(SR * (0.05 + 0.01 * variant)))
+    return room_tail(heel + ring + rattle + toe, seconds=0.5, tau=0.12, mix=0.25)
+
+
+def footstep_wood(variant):
+    """Boot on boards: a hollow knock with a little creak."""
+    seconds = 0.4
+    t = t_axis(seconds)
+    knock = _modes(t, 180 + 25 * variant, [1.0, 1.9, 3.1], [0.05, 0.035, 0.02], [1, .5, .3]) * 1.4
+    thud = lowpass(noise(seconds), 300) * env_ad(len(t), 0.002, 0.03) * 1.6
+    creak = band(noise(seconds), 900, 2200) * env_ad(len(t), 0.04, 0.05) * 0.15 * (variant == 1)
+    toe = np.roll(knock * 0.5 + thud * 0.4, int(SR * (0.05 + 0.008 * variant)))
+    return room_tail(knock + thud + creak + toe, seconds=0.4, tau=0.09, mix=0.2)
+
+
+def footstep_dirt(variant):
+    """Boot on packed earth / gravel: soft thump and a crunch of grit, no room."""
+    seconds = 0.35
+    t = t_axis(seconds)
+    thump = lowpass(noise(seconds), 200 + 30 * variant) * env_ad(len(t), 0.004, 0.035) * 2.0
+    crunch = band(noise(seconds), 1200, 6000) * env_ad(len(t), 0.006, 0.06) * 0.45
+    grains = np.zeros_like(t)
+    for _ in range(25):
+        i = rng.integers(0, int(len(t) * 0.6))
+        grains[i:i + 60] += highpass(rng.standard_normal(60), 3000) * np.exp(-np.arange(60) / 12) * rng.uniform(0.1, 0.4)
+    return thump + crunch + grains
+
+
+def footstep_grass(variant):
+    """Boot through grass / leaves: a soft swish and a muffled thump."""
+    seconds = 0.4
+    t = t_axis(seconds)
+    swish = band(noise(seconds), 1500 + 300 * variant, 9000) * env_ad(len(t), 0.03, 0.08) * 0.5
+    thump = lowpass(noise(seconds), 180) * env_ad(len(t), 0.006, 0.04) * 1.4
+    return swish + thump
+
+
+def impact_concrete(variant):
+    """Bullet into concrete: a sharp crack, a puff, debris pattering down."""
+    seconds = 0.7
+    t = t_axis(seconds)
+    crack = highpass(noise(seconds), 1800) * env_ad(len(t), 0.0003, 0.008) * 2.2
+    body = band(noise(seconds), 300, 2500) * env_ad(len(t), 0.0008, 0.03)
+    debris = np.zeros_like(t)
+    for _ in range(18):
+        i = rng.integers(int(SR * 0.03), int(SR * 0.45))
+        debris[i:i + 200] += band(rng.standard_normal(200), 2000, 7000) * np.exp(-np.arange(200) / 40) * rng.uniform(0.05, 0.25)
+    return room_tail(crack + body + debris, seconds=0.6, tau=0.15, mix=0.3)
+
+
+def impact_metal(variant):
+    """Bullet into steel: a hard tink with a bright ring."""
+    seconds = 0.9
+    t = t_axis(seconds)
+    tink = highpass(noise(seconds), 3000) * env_ad(len(t), 0.0002, 0.004) * 2.0
+    ring = _modes(t, 1150 + 260 * variant, [1.0, 2.1, 3.4, 5.2, 7.3], [0.35, 0.22, 0.14, 0.09, 0.06], [1, .7, .5, .35, .2])
+    return room_tail(tink + ring * 0.7, seconds=0.6, tau=0.18, mix=0.25)
+
+
+def impact_wood(variant):
+    """Bullet into wood: a dull thock and splinters."""
+    seconds = 0.5
+    t = t_axis(seconds)
+    thock = _modes(t, 240 + 40 * variant, [1.0, 2.2, 3.7], [0.04, 0.025, 0.015]) * 1.3
+    crack = band(noise(seconds), 1500, 6000) * env_ad(len(t), 0.0005, 0.012)
+    splinter = band(noise(seconds), 3000, 9000) * env_ad(len(t), 0.01, 0.05) * 0.25
+    return room_tail(thock + crack + splinter, seconds=0.4, tau=0.1, mix=0.2)
+
+
+def impact_dirt(variant):
+    """Bullet into earth: a dull thud and a spray of soil."""
+    seconds = 0.5
+    t = t_axis(seconds)
+    thud = lowpass(noise(seconds), 400) * env_ad(len(t), 0.001, 0.03) * 2.0
+    spray = band(noise(seconds), 800, 5000) * env_ad(len(t), 0.01, 0.09) * 0.5
+    return thud + spray
+
+
+def impact_glass(variant):
+    """Bullet through glass: a crack and tinkling shards."""
+    seconds = 1.2
+    t = t_axis(seconds)
+    crack = highpass(noise(seconds), 2500) * env_ad(len(t), 0.0002, 0.01) * 2.0
+    shards = np.zeros_like(t)
+    for _ in range(40):
+        i = rng.integers(int(SR * 0.01), int(SR * 0.8))
+        f = rng.uniform(3000, 9000)
+        n = 900
+        shards[i:i + n] += np.sin(2 * np.pi * f * np.arange(n) / SR) * np.exp(-np.arange(n) / 150) * rng.uniform(0.05, 0.3)
+    return room_tail(crack + shards, seconds=0.5, tau=0.15, mix=0.2)
+
+
+def impact_flesh(variant):
+    """Bullet hitting a body: a short wet thwack (shorter and sharper than the melee hit)."""
+    seconds = 0.35
+    t = t_axis(seconds)
+    thwack = np.sin(2 * np.pi * np.cumsum(140 * np.exp(-t * 25) + 60) / SR) * np.exp(-t / 0.05) * 1.5
+    slap = band(noise(seconds), 400, 2500) * env_ad(len(t), 0.0005, 0.02)
+    wet = band(noise(seconds), 600 + 200 * variant, 1800) * env_ad(len(t), 0.01, 0.05) * 0.4
+    return thwack + slap + wet
+
+
+def ricochet(variant):
+    """A bullet glancing off: a tink and the falling whine of it tumbling away."""
+    seconds = 0.8
+    t = t_axis(seconds)
+    f = (3200 + 700 * variant) * np.exp(-t * 1.6) + 900
+    whine = np.sin(2 * np.pi * np.cumsum(f) / SR) * env_ad(len(t), 0.01, 0.25) * 0.8
+    whine += band(noise(seconds), 2000, 6000) * env_ad(len(t), 0.01, 0.2) * 0.2
+    tink = highpass(noise(seconds), 3000) * env_ad(len(t), 0.0002, 0.004) * 1.5
+    return tink + whine
+
+
+def breath_heavy_loop(seconds=8.0, rate_hz=0.95):
+    """Out-of-breath panting heard from inside the head: breathy noise shaped into in/out
+    breaths (out louder and lower), a little throat rasp. Loops seamlessly."""
+    t = t_axis(seconds)
+    cycles = int(round(seconds * rate_hz))
+    rate = cycles / seconds                       # whole number of breaths per loop
+    phase = (t * rate) % 1.0
+    # inhale 0..0.42, exhale 0.48..0.95
+    inhale = np.clip(np.sin(np.pi * np.clip(phase / 0.42, 0, 1)), 0, 1) ** 1.5 * (phase < 0.42)
+    exh_p = np.clip((phase - 0.48) / 0.47, 0, 1)
+    exhale = np.sin(np.pi * exh_p) ** 1.2 * ((phase >= 0.48) & (phase < 0.95))
+    air_in = band(noise(seconds), 900, 5500, order=2) * inhale * 0.55
+    air_out = band(noise(seconds), 400, 3200, order=2) * exhale
+    rasp = band(noise(seconds), 150, 600, order=2) * exhale * 0.35
+    x = air_in + air_out + rasp
+    x = lowpass(x, 7000)
+    # remove the filter start-up so the seam is clean
+    xf = int(SR * 0.05)
+    x[:xf] *= np.linspace(0, 1, xf)
+    x[-xf:] *= np.linspace(1, 0, xf)
+    return x
+
 def build_audio():
     os.makedirs(AUDIO_DIR, exist_ok=True)
     save_wav("SW_Melee_Whoosh_01", whoosh(0.38, 900, 450))
@@ -240,6 +394,29 @@ def build_audio():
         save_wav(f"SW_Footstep_Concrete_0{v + 1}", footstep(v))
     save_wav("SW_Player_Hurt", player_hurt())
     save_wav("SW_Ambience_BodycamHiss_Loop", bodycam_hiss_loop(), peak=0.35)
+    build_realism_audio()
+
+
+def build_realism_audio():
+    """Footsteps per surface, bullet impacts, ricochets, breathing (realism pass, Nov 2026).
+    Own generator so (re)making these never changes the original sounds above."""
+    global rng
+    rng = np.random.default_rng(2611)
+    for v in range(4):
+        save_wav(f"SW_Footstep_Metal_0{v + 1}", footstep_metal(v))
+    for v in range(3):
+        save_wav(f"SW_Footstep_Wood_0{v + 1}", footstep_wood(v))
+        save_wav(f"SW_Footstep_Dirt_0{v + 1}", footstep_dirt(v), peak=0.75)
+        save_wav(f"SW_Footstep_Grass_0{v + 1}", footstep_grass(v), peak=0.6)
+        save_wav(f"SW_Impact_Concrete_0{v + 1}", impact_concrete(v))
+        save_wav(f"SW_Impact_Metal_0{v + 1}", impact_metal(v), peak=0.8)
+        save_wav(f"SW_Impact_Wood_0{v + 1}", impact_wood(v))
+    for v in range(2):
+        save_wav(f"SW_Impact_Dirt_0{v + 1}", impact_dirt(v), peak=0.75)
+        save_wav(f"SW_Impact_Glass_0{v + 1}", impact_glass(v), peak=0.8)
+        save_wav(f"SW_Impact_Flesh_0{v + 1}", impact_flesh(v))
+        save_wav(f"SW_Ricochet_0{v + 1}", ricochet(v), peak=0.7)
+    save_wav("SW_Breath_Heavy_Loop", breath_heavy_loop(), peak=0.7)
 
 
 # ============================================================ texture helpers

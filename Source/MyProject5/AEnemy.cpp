@@ -1,20 +1,32 @@
 // AEnemy.cpp
-// [Rebuilt Oct 2026 from coursework excerpts]
+// [Rebuilt Oct 2026 from coursework excerpts; senses, hearing, Search and NavMesh added Nov 2026]
 
 #include "AEnemy.h"
 #include "Animation/AnimationAsset.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "DrawDebugHelpers.h"
 #include "Engine/DamageEvents.h"
+#include "Engine/Engine.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/DamageType.h"
-#include "DrawDebugHelpers.h"
+#include "HAL/IConsoleManager.h"
 #include "Kismet/GameplayStatics.h"
+#include "MyFPSPawn.h"
 #include "NavigationPath.h"
 #include "NavigationSystem.h"
+#include "RealismUtils.h"
 #include "TimerManager.h"
+
+// Console: `ah.DebugNoise 1` draws every noise (yellow sphere = how far it carries),
+// `ah.DebugSenses 1` draws each enemy's vision cone, sight range and awareness.
+static TAutoConsoleVariable<int32> CVarDebugNoise(TEXT("ah.DebugNoise"), 0,
+    TEXT("1 = draw every noise enemies can hear (sphere = range)."), ECVF_Cheat);
+static TAutoConsoleVariable<int32> CVarDebugSenses(TEXT("ah.DebugSenses"), 0,
+    TEXT("1 = draw enemy vision cones, sight range and awareness."), ECVF_Cheat);
 
 AEnemy::AEnemy()
 {
@@ -82,7 +94,20 @@ void AEnemy::Tick(float DeltaTime)
     case EAIState::Patrol: HandleState_Patrol(DeltaTime); break;
     case EAIState::Chase:  HandleState_Chase(DeltaTime);  break;
     case EAIState::Attack: HandleState_Attack(DeltaTime); break;
+    case EAIState::Search: HandleState_Search(DeltaTime); break;
     case EAIState::Dead:   break;
+    }
+
+    if (State == EAIState::Chase || State == EAIState::Attack)
+    {
+        Awareness = 1.f;   // it knows
+    }
+
+    UpdateFootsteps(DeltaTime);
+
+    if (CVarDebugSenses.GetValueOnGameThread() != 0)
+    {
+        DrawDebugSenses();
     }
 }
 
@@ -101,8 +126,8 @@ void AEnemy::SwitchState(EAIState NewState)
         break;
     case EAIState::Chase:
     case EAIState::Attack:
+    case EAIState::Search:
     case EAIState::Dead:
-        // No entry logic at present; slots here for future extension
         break;
     }
 }
@@ -111,11 +136,9 @@ void AEnemy::SwitchState(EAIState NewState)
 
 void AEnemy::HandleState_Patrol(float DeltaTime)
 {
-    if (CanDetectPlayer(true))
+    if (UpdateAwareness(DeltaTime))
     {
-        bHasObservation = false;
-        SwitchState(EAIState::Chase);
-        return;
+        return;   // spotted (Chase) or suspicious (Search)
     }
 
     MoveTowards(CurrentPatrolTarget, DeltaTime, PatrolAcceptRadius, 0.5f);
@@ -142,9 +165,11 @@ void AEnemy::HandleState_Chase(float DeltaTime)
     }
 
     const float Now = GetWorld()->GetTimeSeconds();
-    if (!bSeen && (Now - LastSeenTime) > GiveUpTime)
+    const bool bReachedLastSeen = !bSeen && FVector::Dist2D(GetActorLocation(), LastSeenPlayerLocation) < 150.f;
+    if (!bSeen && ((Now - LastSeenTime) > GiveUpTime || bReachedLastSeen))
     {
-        SwitchState(EAIState::Patrol);
+        // Lost them: look around where they were last seen instead of wandering off.
+        BeginSearch(LastSeenPlayerLocation, true);
         return;
     }
 
@@ -167,7 +192,7 @@ void AEnemy::HandleState_Attack(float DeltaTime)
     }
     if (!CanDetectPlayer(true))
     {
-        // Ducked behind something: go and look where they were (Chase gives up after GiveUpTime)
+        // Ducked behind something: go and look where they were (Chase -> Search after GiveUpTime)
         SwitchState(EAIState::Chase);
         return;
     }
@@ -188,32 +213,185 @@ void AEnemy::HandleState_Attack(float DeltaTime)
     }
 }
 
-// ------------------------------------------------------------------ helpers
+void AEnemy::BeginSearch(const FVector& Center, bool bUrgent)
+{
+    const float Now = GetWorld()->GetTimeSeconds();
+    SearchCenter = Center;
+    SearchPoint = Center;
+    bSearchUrgent = bUrgent;
+    bSearchReachedCenter = false;
+    SearchEndTime = Now + SearchDuration;
+    SearchLegStartTime = Now;
+    SearchLookUntil = 0.f;
+    Awareness = FMath::Max(Awareness, SuspicionLevel);
+
+    if (State == EAIState::Search)
+    {
+        ClearPath();   // already searching: just head for the new spot
+    }
+    else
+    {
+        SwitchState(EAIState::Search);
+    }
+}
+
+void AEnemy::HandleState_Search(float DeltaTime)
+{
+    if (UpdateAwareness(DeltaTime))
+    {
+        return;   // found them
+    }
+
+    const float Now = GetWorld()->GetTimeSeconds();
+    if (Now > SearchEndTime)
+    {
+        Awareness = FMath::Min(Awareness, SuspicionLevel * 0.5f);
+        SwitchState(EAIState::Patrol);
+        return;
+    }
+
+    // Standing still, looking about
+    if (Now < SearchLookUntil)
+    {
+        MoveTowards(GetActorLocation(), DeltaTime, 1000000.f, 0.f);   // brake
+        const FRotator Want(0.f, SearchLookYaw, 0.f);
+        SetActorRotation(FMath::RInterpTo(GetActorRotation(), Want, DeltaTime, 2.5f));
+        if (FMath::Abs(FMath::FindDeltaAngleDegrees(GetActorRotation().Yaw, SearchLookYaw)) < 6.f)
+        {
+            SearchLookYaw = GetActorRotation().Yaw + FMath::FRandRange(70.f, 130.f) * (FMath::RandBool() ? 1.f : -1.f);
+        }
+        return;
+    }
+
+    const FVector Goal = bSearchReachedCenter ? SearchPoint : SearchCenter;
+    const float Speed = (bSearchUrgent && !bSearchReachedCenter) ? 0.95f : SearchSpeedScale;
+    MoveTowards(Goal, DeltaTime, 80.f, Speed);
+
+    if (FVector::Dist2D(GetActorLocation(), Goal) <= 130.f || Now - SearchLegStartTime > 9.f)
+    {
+        // Got there (or can't): stop and look around, then try somewhere else nearby
+        bSearchReachedCenter = true;
+        SearchLookUntil = Now + FMath::FRandRange(1.5f, 3.f);
+        SearchLookYaw = GetActorRotation().Yaw + FMath::FRandRange(-120.f, 120.f);
+        SearchPoint = RandomReachablePoint(SearchCenter, SearchRadius);
+        SearchLegStartTime = SearchLookUntil;   // the next leg's clock starts once it's done looking
+        ClearPath();
+    }
+}
+
+// ------------------------------------------------------------------ senses
+
+bool AEnemy::SeesPlayer(float* OutCloseness) const
+{
+    if (!PlayerPawn) return false;
+
+    const FVector Eye = GetActorLocation() + FVector(0.f, 0.f, EyeHeight);
+    const FVector Head = PlayerPawn->GetPawnViewLocation();
+    const FVector ToPlayer = Head - Eye;
+    const float Dist = ToPlayer.Size();
+
+    // How visible they are: light they're standing in, torch, crouching (see AMyFPSPawn::GetVisibility01)
+    float Visibility = 1.f;
+    bool bTorchInMyFace = false;
+    if (const AMyFPSPawn* Player = Cast<AMyFPSPawn>(PlayerPawn))
+    {
+        if (bUseLighting)
+        {
+            Visibility = Player->GetVisibility01();
+        }
+        bTorchInMyFace = Player->IsTorchShiningAt(Eye);
+    }
+
+    float Range = FMath::Lerp(DarkSightRange, DetectionRadius, Visibility);
+    if (bTorchInMyFace)
+    {
+        Range = FMath::Max(Range, DetectionRadius * 1.2f);   // a torch in the dark is seen a long way off
+    }
+    if (Dist > Range)
+    {
+        return false;
+    }
+
+    // Field of view - unless they're right next to it or shining a torch at it
+    if (Dist > CloseSenseRadius && !bTorchInMyFace)
+    {
+        const bool bAlert = (State == EAIState::Chase || State == EAIState::Attack);
+        const float HalfAngle = bAlert ? AlertVisionHalfAngle : VisionHalfAngle;
+        const float CosAngle = FVector::DotProduct(GetActorForwardVector(), ToPlayer / FMath::Max(Dist, 1.f));
+        if (CosAngle < FMath::Cos(FMath::DegreesToRadians(HalfAngle)))
+        {
+            return false;
+        }
+    }
+
+    if (bUseLineOfSight && !HasLineOfSightToPlayer())
+    {
+        return false;
+    }
+
+    if (OutCloseness)
+    {
+        *OutCloseness = FMath::Clamp(1.f - Dist / FMath::Max(Range, 1.f), 0.f, 1.f);
+    }
+    return true;
+}
 
 bool AEnemy::CanDetectPlayer(bool bUpdateMemory)
 {
     if (!PlayerPawn) return false;
 
-    const FVector MyLoc = GetActorLocation();
-    const FVector PlayerLoc = PlayerPawn->GetActorLocation();
-    const float Dist = FVector::Dist(MyLoc, PlayerLoc);
     const float Now = GetWorld()->GetTimeSeconds();
-
-    if (Dist <= DetectionRadius)  // primary radius
+    if (SeesPlayer())
     {
-        const bool bVisible = !bUseLineOfSight || HasLineOfSightToPlayer();
-        if (bVisible && bUpdateMemory)
+        if (bUpdateMemory)
         {
-            LastSeenPlayerLocation = PlayerLoc;
+            LastSeenPlayerLocation = PlayerPawn->GetActorLocation();
             LastSeenTime = Now;
         }
-        return bVisible;
+        return true;
     }
 
-    // Secondary: awareness persists within LoseSightRadius if recently seen
-    if (Dist <= LoseSightRadius && (Now - LastSeenTime) <= GiveUpTime)
-        return true;
+    // Without line of sight rules (old mode): awareness persists a little beyond sight range
+    if (!bUseLineOfSight)
+    {
+        const float Dist = FVector::Dist(GetActorLocation(), PlayerPawn->GetActorLocation());
+        if (Dist <= LoseSightRadius && (Now - LastSeenTime) <= GiveUpTime)
+            return true;
+    }
+    return false;
+}
 
+bool AEnemy::UpdateAwareness(float DeltaTime)
+{
+    float Closeness = 0.f;
+    if (SeesPlayer(&Closeness))
+    {
+        // Takes a moment to register someone at the edge of sight; almost instant up close.
+        const float Rate = AwarenessGain * (0.35f + 1.65f * Closeness) * (State == EAIState::Search ? 1.6f : 1.f);
+        Awareness = FMath::Min(1.f, Awareness + Rate * DeltaTime);
+
+        if (Awareness >= 1.f)
+        {
+            LastSeenPlayerLocation = PlayerPawn->GetActorLocation();
+            LastSeenTime = GetWorld()->GetTimeSeconds();
+            bHasObservation = false;
+            SwitchState(EAIState::Chase);
+            return true;
+        }
+        if (State == EAIState::Patrol && Awareness >= SuspicionLevel)
+        {
+            BeginSearch(PlayerPawn->GetActorLocation(), false);   // "what was that?"
+            return true;
+        }
+        if (State == EAIState::Search)
+        {
+            SearchCenter = PlayerPawn->GetActorLocation();   // keep looking where the shape was
+        }
+    }
+    else
+    {
+        Awareness = FMath::Max(0.f, Awareness - AwarenessDecay * DeltaTime);
+    }
     return false;
 }
 
@@ -230,13 +408,13 @@ bool AEnemy::HasLineOfSightToPlayer() const
     PlayerPawn->GetAttachedActors(Carried, true, true);
     Params.AddIgnoredActors(Carried);
 
-    // Two rays, to the player's head and chest: peeking over a crate still gets you seen.
+    // Two rays, to the player's head (the camera - so leaning round a corner shows your head)
+    // and chest: peeking over a crate still gets you seen.
     const FVector EyeLoc = GetActorLocation() + FVector(0.f, 0.f, EyeHeight);
-    const FVector PlayerLoc = PlayerPawn->GetActorLocation();
-    for (const float Up : { 50.f, 0.f })
+    const FVector Targets[2] = { PlayerPawn->GetPawnViewLocation(), PlayerPawn->GetActorLocation() };
+    for (const FVector& To : Targets)
     {
         FHitResult Hit;
-        const FVector To = PlayerLoc + FVector(0.f, 0.f, Up);
         if (!GetWorld()->LineTraceSingleByChannel(Hit, EyeLoc, To, ECC_Visibility, Params))
         {
             return true;
@@ -249,6 +427,95 @@ bool AEnemy::HasLineOfSightToPlayer() const
     }
     return false;
 }
+
+// ------------------------------------------------------------------ hearing
+
+void AEnemy::ReportNoise(const UObject* WorldContext, const FVector& Location, float Range, AActor* NoiseMaker)
+{
+    UWorld* World = GEngine ? GEngine->GetWorldFromContextObject(WorldContext, EGetWorldErrorMode::ReturnNull) : nullptr;
+    if (!World || Range <= 1.f)
+    {
+        return;
+    }
+
+    if (CVarDebugNoise.GetValueOnGameThread() != 0)
+    {
+        DrawDebugSphere(World, Location, Range, 20, FColor::Yellow, false, 1.2f, 0, 1.f);
+    }
+
+    for (TActorIterator<AEnemy> It(World); It; ++It)
+    {
+        AEnemy* Enemy = *It;
+        if (Enemy && Enemy != NoiseMaker)
+        {
+            Enemy->HearNoise(Location, Range, NoiseMaker);
+        }
+    }
+}
+
+void AEnemy::HearNoise(const FVector& Location, float Range, AActor* NoiseMaker)
+{
+    if (bDead || HearingScale <= 0.f) return;
+
+    const FVector Ear = GetActorLocation() + FVector(0.f, 0.f, EyeHeight);
+    const float Dist = FVector::Dist(Ear, Location);
+    float Effective = Range * HearingScale;
+    if (Dist > Effective) return;
+
+    // Through a wall it's muffled and doesn't carry as far
+    FHitResult Hit;
+    FCollisionQueryParams Params(SCENE_QUERY_STAT(AEnemyHearing), false, this);
+    if (NoiseMaker)
+    {
+        Params.AddIgnoredActor(NoiseMaker);
+    }
+    if (PlayerPawn)
+    {
+        Params.AddIgnoredActor(PlayerPawn);
+    }
+    if (GetWorld()->LineTraceSingleByChannel(Hit, Location + FVector(0.f, 0.f, 10.f), Ear, ECC_Visibility, Params))
+    {
+        Effective *= WallMuffle;
+        if (Dist > Effective) return;
+    }
+
+    const float Loudness = 1.f - Dist / FMath::Max(Effective, 1.f);   // 1 = right next to it
+    const float Now = GetWorld()->GetTimeSeconds();
+
+    // It can't pinpoint a sound exactly
+    const FVector2D Err = FMath::RandPointInCircle(NoiseLocationError * Dist);
+    const FVector Guess = Location + FVector(Err.X, Err.Y, 0.f);
+
+    switch (State)
+    {
+    case EAIState::Chase:
+    case EAIState::Attack:
+        // Already hunting: noises the player makes tell it where they've gone
+        if (NoiseMaker == PlayerPawn && !SeesPlayer())
+        {
+            LastSeenPlayerLocation = Guess;
+            LastSeenTime = Now;
+        }
+        break;
+
+    case EAIState::Patrol:
+    case EAIState::Search:
+        // Don't re-target on every footstep: only a louder noise, or a new one after a pause
+        if (State == EAIState::Search && Loudness <= LastHeardLoudness && Now - LastHeardTime < 1.5f)
+        {
+            break;
+        }
+        LastHeardTime = Now;
+        LastHeardLoudness = Loudness;
+        BeginSearch(Guess, Loudness > 0.35f);
+        break;
+
+    case EAIState::Dead:
+        break;
+    }
+}
+
+// ------------------------------------------------------------------ observation / prediction
 
 void AEnemy::UpdatePlayerObservation(float DeltaTime)
 {
@@ -288,12 +555,14 @@ FVector AEnemy::PredictPlayerLocation()
     return Predicted;
 }
 
+// ------------------------------------------------------------------ movement
+
 void AEnemy::MoveTowards(const FVector& Target, float DeltaTime, float StopDist, float SpeedScale)
 {
     const FVector MyLoc = GetActorLocation();
     UCharacterMovementComponent* Move = GetCharacterMovement();
 
-    if (SpeedScale <= 0.f)   // "stand still" (Q-learning HoldPosition): just brake
+    if (SpeedScale <= 0.f)   // "stand still" (HoldPosition / looking around): just brake
     {
         if (Move)
             Move->Velocity = FMath::VInterpTo(Move->Velocity, FVector::ZeroVector, DeltaTime, 8.f);
@@ -377,7 +646,7 @@ bool AEnemy::PlanPath(const FVector& Target)
         return false;
     }
 
-    // Flank / retreat / circle targets can land inside a wall: snap them onto the NavMesh first.
+    // Flank / retreat / circle / search targets can land inside a wall: snap them onto the NavMesh first.
     FVector Goal = Target;
     FNavLocation OnNav;
     if (Nav->ProjectPointToNavigation(Target, OnNav, FVector(300.f, 300.f, 250.f)))
@@ -432,7 +701,7 @@ void AEnemy::FacePlayer(float DeltaTime)
     SetActorRotation(FMath::RInterpTo(GetActorRotation(), Want, DeltaTime, 8.f));
 }
 
-FVector AEnemy::PickNewPatrolPoint() const
+FVector AEnemy::RandomReachablePoint(const FVector& Center, float Radius) const
 {
     // On a NavMesh: a random point it can actually walk to (not inside a wall or outside the building)
     if (bUseNavMesh)
@@ -441,14 +710,84 @@ FVector AEnemy::PickNewPatrolPoint() const
         {
             FNavLocation Point;
             if (Nav->GetDefaultNavDataInstance() &&
-                Nav->GetRandomReachablePointInRadius(SpawnLocation, PatrolRadius, Point))
+                Nav->GetRandomReachablePointInRadius(Center, Radius, Point))
             {
                 return Point.Location;
             }
         }
     }
-    const FVector2D R = FMath::RandPointInCircle(PatrolRadius);
-    return SpawnLocation + FVector(R.X, R.Y, 0.f);
+    const FVector2D R = FMath::RandPointInCircle(Radius);
+    return Center + FVector(R.X, R.Y, 0.f);
+}
+
+FVector AEnemy::PickNewPatrolPoint() const
+{
+    return RandomReachablePoint(SpawnLocation, PatrolRadius);
+}
+
+// ------------------------------------------------------------------ footsteps
+
+void AEnemy::UpdateFootsteps(float DeltaTime)
+{
+    if (!bPlayFootsteps) return;
+    const UCharacterMovementComponent* Move = GetCharacterMovement();
+    if (!Move || !Move->IsMovingOnGround()) return;
+
+    const float Speed = static_cast<float>(GetVelocity().Size2D());
+    if (Speed < 30.f)
+    {
+        return;
+    }
+
+    // Longer strides the faster it goes
+    StepDistance += Speed * DeltaTime;
+    const float Stride = FMath::Lerp(70.f, 125.f, FMath::Clamp((Speed - 150.f) / 450.f, 0.f, 1.f));
+    if (StepDistance < Stride)
+    {
+        return;
+    }
+    StepDistance = 0.f;
+
+    const float HalfHeight = GetCapsuleComponent() ? GetCapsuleComponent()->GetScaledCapsuleHalfHeight() : 88.f;
+    const FVector Feet = GetActorLocation() - FVector(0.f, 0.f, HalfHeight);
+    const AHRealism::ESurface Surface = AHRealism::SurfaceUnder(GetWorld(), Feet, 40.f, this);
+    const AHRealism::FSurfaceInfo& Info = AHRealism::Info(Surface);
+    USoundBase* Sound = AHRealism::RandomVariant(Info.FootstepSound, Info.FootstepVariants);
+    if (!Sound)
+    {
+        Sound = AHRealism::RandomVariant(TEXT("SW_Footstep_Concrete"), 4);
+    }
+    const float Volume = FootstepVolume * FMath::Clamp(Speed / 450.f, 0.3f, 1.2f) * FMath::Clamp(Info.FootstepLoudness, 0.5f, 1.5f);
+    AHRealism::PlayAt(this, Sound, Feet, Volume, FootstepPitch * FMath::FRandRange(0.93f, 1.07f), FootstepAudibleRange);
+}
+
+void AEnemy::DrawDebugSenses() const
+{
+    UWorld* World = GetWorld();
+    const FVector Eye = GetActorLocation() + FVector(0.f, 0.f, EyeHeight);
+    const bool bAlert = (State == EAIState::Chase || State == EAIState::Attack);
+    const float HalfAngle = FMath::DegreesToRadians(bAlert ? AlertVisionHalfAngle : VisionHalfAngle);
+
+    float Visibility = 1.f;
+    if (const AMyFPSPawn* Player = Cast<AMyFPSPawn>(PlayerPawn))
+    {
+        Visibility = bUseLighting ? Player->GetVisibility01() : 1.f;
+    }
+    const float Range = FMath::Lerp(DarkSightRange, DetectionRadius, Visibility);
+
+    const FColor Colour = bAlert ? FColor::Red : (State == EAIState::Search ? FColor::Orange : FColor::Cyan);
+    DrawDebugCone(World, Eye, GetActorForwardVector(), Range, HalfAngle, HalfAngle, 16, Colour, false, -1.f, 0, 1.f);
+    DrawDebugCircle(World, GetActorLocation(), CloseSenseRadius, 24, Colour, false, -1.f, 0, 1.f,
+        FVector(1, 0, 0), FVector(0, 1, 0), false);
+
+    static const TCHAR* StateNames[] = { TEXT("Patrol"), TEXT("Chase"), TEXT("Attack"), TEXT("Search"), TEXT("Dead") };
+    const int32 S = FMath::Clamp(static_cast<int32>(State), 0, 4);
+    DrawDebugString(World, Eye + FVector(0, 0, 40), FString::Printf(TEXT("%s  %.0f%%"), StateNames[S], Awareness * 100.f),
+        nullptr, Colour, 0.f, true, 1.1f);
+    if (State == EAIState::Search)
+    {
+        DrawDebugSphere(World, SearchCenter, 40.f, 8, FColor::Orange, false, -1.f);
+    }
 }
 
 void AEnemy::PerformAttack()
@@ -471,14 +810,15 @@ float AEnemy::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent,
     CurrentHealth = FMath::Clamp(CurrentHealth - DamageAmount, 0.f, MaxHealth);
     OnDamaged(DamageAmount);
 
-    // Getting shot while wandering = you know where the player is now
-    if (State == EAIState::Patrol)
+    // Getting hurt while not hunting = you know where the player is now
+    if (State == EAIState::Patrol || State == EAIState::Search)
     {
         if (PlayerPawn)
         {
             LastSeenPlayerLocation = PlayerPawn->GetActorLocation();
             LastSeenTime = GetWorld()->GetTimeSeconds();
         }
+        Awareness = 1.f;
         SwitchState(EAIState::Chase);
     }
 

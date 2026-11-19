@@ -1,8 +1,10 @@
 // AEnemy.h
-// Base enemy: hand-written 4-state FSM (Patrol / Chase / Attack / Dead), layered
-// detection with line of sight, predictive chase with a self-correcting bias,
-// NavMesh path following, point damage, and ragdoll death.
-// [Rebuilt Oct 2026 from coursework excerpts - same design, names and tuning as the original]
+// Base enemy: hand-written FSM (Patrol / Chase / Attack / Search / Dead), senses that work
+// like a person's (vision cone, needs light to see far, an awareness meter that takes time to
+// fill, hearing through walls), predictive chase with a self-correcting bias, NavMesh path
+// following, point damage, and ragdoll death.
+// [Rebuilt Oct 2026 from coursework excerpts - same design, names and tuning as the original;
+//  Search state, senses and hearing added Nov 2026 - Docs/REALISM.md]
 
 #pragma once
 
@@ -18,6 +20,8 @@ enum class EAIState : uint8
     Patrol,
     Chase,
     Attack,
+    /** Heard something / half-saw something / lost the player: go and look around there. */
+    Search,
     Dead
 };
 
@@ -36,6 +40,18 @@ public:
 
     bool IsDead() const { return bDead; }
     EAIState GetState() const { return State; }
+    /** 0 = hasn't noticed anything, 1 = knows exactly where you are. */
+    float GetAwareness() const { return Awareness; }
+
+    /**
+     * Something made a noise. Every enemy within Range (halved-ish through walls) hears it and
+     * comes to look. Gunshots ~45 m, sprinting ~11 m, walking ~4.5 m, crouching silent, bullet
+     * impacts / melee hits / landing / heavy breathing in between. `ah.DebugNoise 1` shows them.
+     */
+    static void ReportNoise(const UObject* WorldContext, const FVector& Location, float Range, AActor* NoiseMaker = nullptr);
+
+    /** Called by ReportNoise. */
+    void HearNoise(const FVector& Location, float Range, AActor* NoiseMaker);
 
 protected:
     virtual void BeginPlay() override;
@@ -45,11 +61,24 @@ protected:
     virtual void HandleState_Patrol(float DeltaTime);
     virtual void HandleState_Chase(float DeltaTime);
     virtual void HandleState_Attack(float DeltaTime);
+    virtual void HandleState_Search(float DeltaTime);
+
+    /** Go to Center and look around it for SearchDuration. Urgent = hurry there (gunshot, lost a target). */
+    void BeginSearch(const FVector& Center, bool bUrgent);
 
     // ---- Helpers shared with ASmartEnemy ----
+    /** In Chase/Attack: can it perceive the player right now (and remember where they are)? */
     bool CanDetectPlayer(bool bUpdateMemory = true);
-    /** True if nothing solid is between the eyes and the player (their own gun/arms don't count). */
+    /**
+     * Raw eyesight this frame: within range for the light the player is in, inside the vision
+     * cone (wider when alert, any direction when right next to it or dazzled by their torch),
+     * and nothing solid in the way. OutCloseness: 1 right next to it, 0 at the edge of sight.
+     */
+    bool SeesPlayer(float* OutCloseness = nullptr) const;
+    /** True if nothing solid is between the eyes and the player's head or chest (their own gun/arms don't count). */
     bool HasLineOfSightToPlayer() const;
+    /** Patrol/Search: fill or drain the awareness meter; switches to Search/Chase. True if it switched state. */
+    bool UpdateAwareness(float DeltaTime);
     void UpdatePlayerObservation(float DeltaTime);
     FVector PredictPlayerLocation();
     /** Walks towards Target: along a NavMesh path when the level has one, else in a straight line.
@@ -57,6 +86,8 @@ protected:
     void MoveTowards(const FVector& Target, float DeltaTime, float StopDist, float SpeedScale = 1.f);
     void FacePlayer(float DeltaTime);
     FVector PickNewPatrolPoint() const;
+    /** Random point it can walk to within Radius of Center (NavMesh), or a random point in the circle. */
+    FVector RandomReachablePoint(const FVector& Center, float Radius) const;
 
     /** Called when an attack lands. Override to add rewards etc. */
     virtual void PerformAttack();
@@ -84,8 +115,42 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Enemy|Patrol")
     float PatrolGiveUpTime = 15.f;
 
+    // ---- Eyes ----
+    /** How far it can see you when you're well lit (or your torch is on). */
     UPROPERTY(EditAnywhere, Category = "Enemy|Detection")
     float DetectionRadius = 2500.f;
+
+    /** How far it can see you in the dark (no light on you, torch off). */
+    UPROPERTY(EditAnywhere, Category = "Enemy|Detection")
+    float DarkSightRange = 700.f;
+
+    /** Uses the light the player is standing in (AMyFPSPawn::GetVisibility01). Off = always DetectionRadius. */
+    UPROPERTY(EditAnywhere, Category = "Enemy|Detection")
+    bool bUseLighting = true;
+
+    /** Half-angle of the vision cone while patrolling / searching (degrees). */
+    UPROPERTY(EditAnywhere, Category = "Enemy|Detection", meta = (ClampMin = 10, ClampMax = 180))
+    float VisionHalfAngle = 60.f;
+
+    /** Half-angle once it's hunting you (looking about more). */
+    UPROPERTY(EditAnywhere, Category = "Enemy|Detection", meta = (ClampMin = 10, ClampMax = 180))
+    float AlertVisionHalfAngle = 90.f;
+
+    /** Closer than this it notices you whichever way it's facing. */
+    UPROPERTY(EditAnywhere, Category = "Enemy|Detection")
+    float CloseSenseRadius = 220.f;
+
+    /** Awareness per second when it can see you (x up to 2 when you're close). 1 = spotted. */
+    UPROPERTY(EditAnywhere, Category = "Enemy|Detection", meta = (ClampMin = 0.1))
+    float AwarenessGain = 1.8f;
+
+    /** Awareness lost per second when it can't see you. */
+    UPROPERTY(EditAnywhere, Category = "Enemy|Detection", meta = (ClampMin = 0.0))
+    float AwarenessDecay = 0.3f;
+
+    /** Awareness at which a patrolling enemy stops and comes to check ("what was that?"). */
+    UPROPERTY(EditAnywhere, Category = "Enemy|Detection", meta = (ClampMin = 0.05, ClampMax = 0.95))
+    float SuspicionLevel = 0.4f;
 
     UPROPERTY(EditAnywhere, Category = "Enemy|Detection")
     float LoseSightRadius = 3000.f;
@@ -101,6 +166,31 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Enemy|Detection")
     float EyeHeight = 60.f;
 
+    // ---- Ears ----
+    /** x every noise's range. 0 = deaf. */
+    UPROPERTY(EditAnywhere, Category = "Enemy|Hearing", meta = (ClampMin = 0.0))
+    float HearingScale = 1.f;
+
+    /** Noise range through a wall (fraction). */
+    UPROPERTY(EditAnywhere, Category = "Enemy|Hearing", meta = (ClampMin = 0.0, ClampMax = 1.0))
+    float WallMuffle = 0.45f;
+
+    /** It can't pinpoint a sound exactly: error as a fraction of the distance to it. */
+    UPROPERTY(EditAnywhere, Category = "Enemy|Hearing", meta = (ClampMin = 0.0, ClampMax = 0.5))
+    float NoiseLocationError = 0.1f;
+
+    // ---- Searching ----
+    UPROPERTY(EditAnywhere, Category = "Enemy|Search")
+    float SearchDuration = 14.f;
+
+    /** How far from the spot it pokes around. */
+    UPROPERTY(EditAnywhere, Category = "Enemy|Search")
+    float SearchRadius = 550.f;
+
+    UPROPERTY(EditAnywhere, Category = "Enemy|Search", meta = (ClampMin = 0.1, ClampMax = 1.5))
+    float SearchSpeedScale = 0.55f;
+
+    // ---- Attack ----
     UPROPERTY(EditAnywhere, Category = "Enemy|Attack")
     float AttackRange = 160.f;
 
@@ -143,6 +233,21 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Enemy|Pathfinding")
     bool bDrawDebugPath = false;
 
+    // ---- Its own footsteps (so you can hear it coming, muffled through walls) ----
+    UPROPERTY(EditAnywhere, Category = "Enemy|Audio")
+    bool bPlayFootsteps = true;
+
+    UPROPERTY(EditAnywhere, Category = "Enemy|Audio", meta = (ClampMin = 0.0))
+    float FootstepVolume = 0.8f;
+
+    /** Lower = heavier. */
+    UPROPERTY(EditAnywhere, Category = "Enemy|Audio", meta = (ClampMin = 0.3, ClampMax = 2.0))
+    float FootstepPitch = 0.85f;
+
+    /** Distance it can be heard walking (cm). */
+    UPROPERTY(EditAnywhere, Category = "Enemy|Audio")
+    float FootstepAudibleRange = 2200.f;
+
     /** Optional death animation (played before ragdoll takes over). */
     UPROPERTY(EditAnywhere, Category = "Enemy|Animation")
     TSoftObjectPtr<UAnimationAsset> DyingAnim;
@@ -168,9 +273,27 @@ protected:
     FVector LastPrediction = FVector::ZeroVector;
     bool bHasObservation = false;
 
+    float Awareness = 0.f;
+
+    // Search state
+    FVector SearchCenter = FVector::ZeroVector;
+    FVector SearchPoint = FVector::ZeroVector;
+    bool bSearchUrgent = false;
+    bool bSearchReachedCenter = false;
+    float SearchEndTime = 0.f;
+    float SearchLegStartTime = 0.f;
+    float SearchLookUntil = 0.f;
+    float SearchLookYaw = 0.f;
+    float LastHeardTime = -1000.f;
+    float LastHeardLoudness = 0.f;
+
 private:
     void EnableRagdoll();
     FTimerHandle TimerHandle_Ragdoll;
+
+    void UpdateFootsteps(float DeltaTime);
+    void DrawDebugSenses() const;
+    float StepDistance = 0.f;
 
     // ---- Path following (see MoveTowards) ----
     /** Plans a path to Target into PathPoints. False = no NavMesh / no route (caller goes direct). */
