@@ -75,6 +75,9 @@
   console, vault door, wall panel, mount ring, catwalk - real size, front +Y, pivot bottom-centre, kit_report.json has
   the catwalk deck height) -> Tools/import_a07_kit_ue58.py -> /Game/ForestResearch/A07Kit ->
   Tools/build_a07_kit_level_ue58.py (walkable catwalks + stairs, wall cladding, cells, consoles, vessel, decon pod).
+- Rugged surfaces: Tools/generate_rugged_textures.py -> Assets/Textures/Rugged (tileable concrete wall / worn floor) ->
+  Tools/retexture_a07_ue58.py (M_AH_WorldAligned world-projected master + MI_AH_RuggedWall/WornFloor/StainedCeiling,
+  swaps the blockout materials on the open level, volumetric dust fog so the torch beam shows).
 - Content/ is not in git: Claude only sees assets pushed under Assets/ (and Saved/AH_AssetInventory.txt if sent).
 
 ## Controls

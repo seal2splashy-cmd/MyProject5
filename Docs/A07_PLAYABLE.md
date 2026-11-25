@@ -19,6 +19,8 @@ with an anomaly in the original facility and a breach set piece in the new wing.
 6. **The A-07 kit** (your Meshy models, game-ready): run `Tools/import_a07_kit_ue58.py` (any map),
    then with the A-07 map open `Tools/build_a07_kit_level_ue58.py`. P, Ctrl+S. See "A-07 kit" below.
 
+7. **Rugged surfaces + dusty air:** with the map open run `Tools/retexture_a07_ue58.py`. Ctrl+S.
+
 Re-running any of the scripts is safe (labels that exist are updated or skipped, not duplicated).
 
 ## The mission
@@ -178,3 +180,24 @@ Re-make them (e.g. a different size) with
 - **steps** up to `MaxStepHeight` (40 cm) are stepped onto (stairs, kerbs, sills),
 - going **down** slopes/stairs keeps you on them instead of tiny falls (no landing thuds per step).
 Both are under Details > Movement on the pawn.
+
+## Rugged walls, worn floors, dusty air (Tools/retexture_a07_ue58.py)
+
+`Tools/generate_rugged_textures.py` (numpy + scipy + Pillow, fixed seeds) makes tileable 2K PBR sets in
+`Assets/Textures/Rugged`, in the style of the damaged-concrete Meshy panel:
+- **T_AH_RuggedConcrete** (4 m per tile): plywood formwork pours (seams with a lip, faint grain, each pour
+  a slightly different tone), form-tie holes with patchy rust runs, air pits, fairly straight branching
+  cracks with damp seeps and white salt bloom, spalled chunks with exposed aggregate (two with rusty
+  rebar), dirty water streaks from the top of each pour, damp and grime patches.
+- **T_AH_WornFloor** (3 m): power-floated slab with saw-cut joints, trowel swirl, lighter worn traffic
+  areas, scuffs and pallet-truck tyre marks, glossy oil spots, dust drifts, hairline cracks.
+
+`Tools/retexture_a07_ue58.py` builds **M_AH_WorldAligned** (in /Game/ForestResearch/Rugged) - textures
+projected from world position, so they're always real size however a blockout box is scaled - with an
+anti-tiling layer, grime on the bottom 70 cm of walls, and Tint / TileSize / NormalStrength /
+RoughnessScale / GrimeHeight / GrimeDarken / MacroAmount parameters. Instances:
+`MI_AH_RuggedWall`, `MI_AH_WornFloor`, `MI_AH_StainedCeiling` (tweak them live in the editor).
+
+It swaps M_FR_Concrete -> wall, M_FR_Floor -> floor, roof/ceiling M_FR_Charcoal -> ceiling on the open
+level, and adds **volumetric dust fog** (AH_DustFog): the torch now throws a visible beam and the lamps
+glow in the haze. Too thick? Select AH_DustFog: Fog Density (0.012) / Volumetric Fog Extinction Scale.
