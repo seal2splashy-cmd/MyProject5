@@ -21,6 +21,8 @@ with an anomaly in the original facility and a breach set piece in the new wing.
 
 7. **Rugged surfaces + dusty air:** with the map open run `Tools/retexture_a07_ue58.py`. Ctrl+S.
 
+8. **The dead team + blood trails:** with the map open run `Tools/place_story_ue58.py`. Ctrl+S.
+
 Re-running any of the scripts is safe (labels that exist are updated or skipped, not duplicated).
 
 ## The mission
@@ -201,3 +203,22 @@ RoughnessScale / GrimeHeight / GrimeDarken / MacroAmount parameters. Instances:
 It swaps M_FR_Concrete -> wall, M_FR_Floor -> floor, roof/ceiling M_FR_Charcoal -> ceiling on the open
 level, and adds **volumetric dust fog** (AH_DustFog): the torch now throws a visible beam and the lamps
 glow in the haze. Too thick? Select AH_DustFog: Fog Density (0.012) / Volumetric Fog Extinction Scale.
+
+## The team that went in before you (Tools/place_story_ue58.py)
+
+Three dead R.S.U. operators from your rigged Meshy **Tactical Operator**: `Tools/pose_dead_operators_blender.py`
+rotates the 24-bone rig into three poses and bakes each to a static mesh (Assets/DeadOperators:
+`SM_AH_DeadOperator_Slumped / Prone / Supine`, 26 k tris, shared 2K textures). Blood decals come from
+`Tools/generate_blood_decals.py` (Assets/Textures/Blood: pool, crawl smear, spatter with drips, boot print
++ mirrored, drops) through **M_AH_BloodDecal** (deferred decal; Tint / Opacity / Roughness) and instances
+`MI_AH_Blood_Pool` (wet), `PoolDried`, `Smear`, `Spatter`, `SpatterDried`, `Boot(B)`, `Boot(B)Faint`, `Drops`.
+
+| Where | What you find |
+|---|---|
+| Storage (objective 1) | Operator slumped against the east partition in a dried pool, spatter and drips on the wall above him. **The access card is on him** (`[F] Take maintenance access card`, then his tag: KIA). |
+| A-07 chamber | A wet pool and spatter at the empty containment ring, a smear where he crawled round its north side, face down at the end, arm stretched towards the magazine on the floor. |
+| Chamber -> maintenance -> tunnel | Bloody boot prints (fresh for ten steps, then fainter) and drops from the ring, round the console, out the east door, through maintenance and down the tunnel, to the third operator on his back a few metres from the extraction beacon. |
+
+Bodies have low invisible collision (you step over the lying ones; F passes through to the card).
+Decal orientation: floor decals project straight down, wall ones along their yaw with the image's top
+up (Roll -90). If a wall splash's drips run upwards in your build, set that decal's Roll to 90.

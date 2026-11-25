@@ -78,6 +78,9 @@
 - Rugged surfaces: Tools/generate_rugged_textures.py -> Assets/Textures/Rugged (tileable concrete wall / worn floor) ->
   Tools/retexture_a07_ue58.py (M_AH_WorldAligned world-projected master + MI_AH_RuggedWall/WornFloor/StainedCeiling,
   swaps the blockout materials on the open level, volumetric dust fog so the torch beam shows).
+- Story: Tools/pose_dead_operators_blender.py (rigged Meshy Tactical Operator -> 3 baked death poses in
+  Assets/DeadOperators) + Tools/generate_blood_decals.py (Assets/Textures/Blood) -> Tools/place_story_ue58.py
+  (bodies + M_AH_BloodDecal decals; the access card objective moves onto the storage body).
 - Content/ is not in git: Claude only sees assets pushed under Assets/ (and Saved/AH_AssetInventory.txt if sent).
 
 ## Controls

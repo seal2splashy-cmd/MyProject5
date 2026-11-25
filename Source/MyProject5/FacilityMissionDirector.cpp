@@ -436,6 +436,12 @@ void AFacilityMissionDirector::HandleInteraction(AFacilityInteractionPoint* Poin
     case EFacilityAction::AccessCard:
         PlayFacilitySound(TEXT("SW_Pickup_Gear_01"), Where, 0.8f, 600.f);
         PushMessage(TEXT("ACCESS CARD COLLECTED  |  Maintenance level 2"), ColGood, 3.5f, true);
+        if (Point->Label.Contains(TEXT("Operator")))
+        {
+            // the card came off a body (Tools/place_story_ue58.py)
+            PushMessage(TEXT("Tag: R.S.U. 2nd Containment Team  |  Status: KIA"), ColLog, 3.5f);
+            PushMessage(TEXT("Three of them went in. Find out what happened."), ColWarn, 4.f);
+        }
         CompleteStep(Point);
         break;
 
