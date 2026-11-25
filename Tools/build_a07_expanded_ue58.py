@@ -229,7 +229,7 @@ def main():
         return
 
     # In this COPY ONLY, reveal a 360-cm-wide gap at the existing back wall.
-    # The rear wall stays as an actor, hidden/disabled for easy manual rollback.
+    # The rear wall stays as an actor, hidden/disabled for rollback.
     old_rear.set_actor_hidden_in_game(True)
     old_rear.set_actor_enable_collision(False)
     old_rear.static_mesh_component.set_visibility(False)
@@ -243,11 +243,20 @@ def main():
     room("A07_Airlock",4700,6000,-550,550,350,
          west=(0,370), east=(0,370))
     # Shared central service hall, with open ends.
-    corridor("A07_Spine",6000,7400,-230,230)
+    # Central hall north branch must be open toward Observation at x6500..6900.
+    block("A07_SpineFloor",(6700,0,-15),(1400,460,30),mat_floor)
+    block("A07_SpineRoof",(6700,0,343),(1400,460,26),mat_dark)
+    wall_x("A07_SpineSouth",6000,7400,-230)
+    wall_x("A07_SpineNorthWest",6000,6500,230)
+    wall_x("A07_SpineNorthEast",6900,7400,230)
 
     # Control room adjoining the north side of the central access corridor.
     # A short northern vestibule connects to the room's southern door.
-    corridor("A07_ControlAccess",6500,6900,230,550)
+    # North connecting vestibule: X-side walls, with OPEN north/south endpoints.
+    block("A07_ControlAccessFloor",(6700,390,-15),(400,320,30),mat_floor)
+    block("A07_ControlAccessRoof",(6700,390,363),(400,320,26),mat_dark)
+    wall_y("A07_ControlAccessWest",6500,230,550)
+    wall_y("A07_ControlAccessEast",6900,230,550)
     room("A07_Observation",6250,7400,550,1850,350,
          south=(6700,360),east=(1150,690))
     # Observation window frame, glass has collision and remains walk-through proof.
