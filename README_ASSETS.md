@@ -4,9 +4,10 @@ Audio and textures in `Assets/` are made by code (free to use, easy to regenerat
 
 | Folder | What | Made by |
 |---|---|---|
-| `Assets/Audio` | 18 WAVs: melee whooshes, flesh/metal hits, gunshot, dry fire, reload, 4 footsteps, hurt, looping bodycam hiss | `Tools/generate_assets.py` |
+| `Assets/Audio` | 50 WAVs: melee whooshes, flesh/metal hits, gunshot, dry fire, reload, footsteps on concrete/metal/wood/dirt/grass, bullet impacts per surface, ricochets, hurt, looping bodycam hiss and heavy breathing | `Tools/generate_assets.py` |
 | `Assets/Textures` | 8 tileable PNGs: concrete, rusted metal, wood, floor tiles (+ normals, rust roughness) | `Tools/generate_assets.py` |
 | `Assets/OperatorArms` | Rigged first-person operator arms FBX + 2K PBR maps | Anomaly Hunter pack, rigged by `Tools/OperatorArms/rig_and_export_fbx_fixed.py` |
+| `Assets/OperatorArmsMeshy` | The arms the game uses: Meshy gloved forearms/hands on the operator rig + 2K maps | `Tools/build_meshy_arms_blender.py` ([Docs/OPERATOR_ARMS_MESHY.md](Docs/OPERATOR_ARMS_MESHY.md)) |
 
 ## Getting them into Unreal (once)
 
@@ -17,6 +18,8 @@ Audio and textures in `Assets/` are made by code (free to use, easy to regenerat
    - imports the textures to `/Game/Generated/Textures` (normals/roughness set to linear)
    - builds materials in `/Game/Generated/Materials` (world-aligned ones for walls/floors, UV ones for weapons)
    - imports the operator arms to `/Game/Generated/Operator` and gives them their six materials
+   - (extras) bodycam lens, pistols, Meshy weapons, the Meshy arms (`SK_AH_OperatorArms_Meshy`,
+     used instead of the original arms automatically) and the Gaunt
    - builds `/Game/Maps/TestArena`: dark concrete warehouse, corridors, physics crates and barrels,
      a few dim coloured lights, bodycam post-process (locked exposure, grain, vignette, fringe),
      a player start and 4 enemies (2 smart, 2 basic)

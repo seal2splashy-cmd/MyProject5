@@ -153,6 +153,17 @@ def click(seconds=0.12, hz=3500, tau=0.004):
     return x
 
 
+def torch_click():
+    """Tail-cap switch: a sharp press and a softer release ~55 ms later, plastic body."""
+    x = pad_to(click(0.05, 4600, 0.0025), 0.16)
+    rel = click(0.05, 3100, 0.0035) * 0.55
+    at = int(SR * 0.055)
+    x[at:at + len(rel)] += rel
+    t = t_axis(0.16)
+    x += np.sin(2 * np.pi * 180 * t) * np.exp(-t / 0.012) * 0.12   # body thump
+    return x
+
+
 def reload_sound():
     seconds = 1.1
     out = np.zeros(int(SR * seconds))
@@ -212,6 +223,255 @@ def player_hurt():
     return thump * 1.5 + ring + muffled
 
 
+
+# ---------------------------------------------------------------- surfaces (realism pass)
+
+def _modes(t, base, ratios, decays, amps=None):
+    """Sum of decaying sine partials - the ring of a struck object."""
+    x = np.zeros_like(t)
+    for i, (r, d) in enumerate(zip(ratios, decays)):
+        a = 1.0 if amps is None else amps[i]
+        x += a * np.sin(2 * np.pi * base * r * (1 + rng.uniform(-0.01, 0.01)) * t + rng.uniform(0, 6.28)) * np.exp(-t / d)
+    return x
+
+
+def footstep_metal(variant):
+    """Boot on steel plate / grating: a clank with a short metallic ring."""
+    seconds = 0.5
+    t = t_axis(seconds)
+    heel = lowpass(noise(seconds), 350) * env_ad(len(t), 0.001, 0.02) * 2.0
+    ring = _modes(t, 520 + 70 * variant, [1.0, 2.3, 3.9, 5.6], [0.09, 0.06, 0.04, 0.03], [1, .6, .4, .25]) * 0.5
+    rattle = band(noise(seconds), 2500, 8000) * env_ad(len(t), 0.002, 0.03) * 0.4
+    toe = np.roll(heel * 0.6 + ring * 0.4, int(SR * (0.05 + 0.01 * variant)))
+    return room_tail(heel + ring + rattle + toe, seconds=0.5, tau=0.12, mix=0.25)
+
+
+def footstep_wood(variant):
+    """Boot on boards: a hollow knock with a little creak."""
+    seconds = 0.4
+    t = t_axis(seconds)
+    knock = _modes(t, 180 + 25 * variant, [1.0, 1.9, 3.1], [0.05, 0.035, 0.02], [1, .5, .3]) * 1.4
+    thud = lowpass(noise(seconds), 300) * env_ad(len(t), 0.002, 0.03) * 1.6
+    creak = band(noise(seconds), 900, 2200) * env_ad(len(t), 0.04, 0.05) * 0.15 * (variant == 1)
+    toe = np.roll(knock * 0.5 + thud * 0.4, int(SR * (0.05 + 0.008 * variant)))
+    return room_tail(knock + thud + creak + toe, seconds=0.4, tau=0.09, mix=0.2)
+
+
+def footstep_dirt(variant):
+    """Boot on packed earth / gravel: soft thump and a crunch of grit, no room."""
+    seconds = 0.35
+    t = t_axis(seconds)
+    thump = lowpass(noise(seconds), 200 + 30 * variant) * env_ad(len(t), 0.004, 0.035) * 2.0
+    crunch = band(noise(seconds), 1200, 6000) * env_ad(len(t), 0.006, 0.06) * 0.45
+    grains = np.zeros_like(t)
+    for _ in range(25):
+        i = rng.integers(0, int(len(t) * 0.6))
+        grains[i:i + 60] += highpass(rng.standard_normal(60), 3000) * np.exp(-np.arange(60) / 12) * rng.uniform(0.1, 0.4)
+    return thump + crunch + grains
+
+
+def footstep_grass(variant):
+    """Boot through grass / leaves: a soft swish and a muffled thump."""
+    seconds = 0.4
+    t = t_axis(seconds)
+    swish = band(noise(seconds), 1500 + 300 * variant, 9000) * env_ad(len(t), 0.03, 0.08) * 0.5
+    thump = lowpass(noise(seconds), 180) * env_ad(len(t), 0.006, 0.04) * 1.4
+    return swish + thump
+
+
+def impact_concrete(variant):
+    """Bullet into concrete: a sharp crack, a puff, debris pattering down."""
+    seconds = 0.7
+    t = t_axis(seconds)
+    crack = highpass(noise(seconds), 1800) * env_ad(len(t), 0.0003, 0.008) * 2.2
+    body = band(noise(seconds), 300, 2500) * env_ad(len(t), 0.0008, 0.03)
+    debris = np.zeros_like(t)
+    for _ in range(18):
+        i = rng.integers(int(SR * 0.03), int(SR * 0.45))
+        debris[i:i + 200] += band(rng.standard_normal(200), 2000, 7000) * np.exp(-np.arange(200) / 40) * rng.uniform(0.05, 0.25)
+    return room_tail(crack + body + debris, seconds=0.6, tau=0.15, mix=0.3)
+
+
+def impact_metal(variant):
+    """Bullet into steel: a hard tink with a bright ring."""
+    seconds = 0.9
+    t = t_axis(seconds)
+    tink = highpass(noise(seconds), 3000) * env_ad(len(t), 0.0002, 0.004) * 2.0
+    ring = _modes(t, 1150 + 260 * variant, [1.0, 2.1, 3.4, 5.2, 7.3], [0.35, 0.22, 0.14, 0.09, 0.06], [1, .7, .5, .35, .2])
+    return room_tail(tink + ring * 0.7, seconds=0.6, tau=0.18, mix=0.25)
+
+
+def impact_wood(variant):
+    """Bullet into wood: a dull thock and splinters."""
+    seconds = 0.5
+    t = t_axis(seconds)
+    thock = _modes(t, 240 + 40 * variant, [1.0, 2.2, 3.7], [0.04, 0.025, 0.015]) * 1.3
+    crack = band(noise(seconds), 1500, 6000) * env_ad(len(t), 0.0005, 0.012)
+    splinter = band(noise(seconds), 3000, 9000) * env_ad(len(t), 0.01, 0.05) * 0.25
+    return room_tail(thock + crack + splinter, seconds=0.4, tau=0.1, mix=0.2)
+
+
+def impact_dirt(variant):
+    """Bullet into earth: a dull thud and a spray of soil."""
+    seconds = 0.5
+    t = t_axis(seconds)
+    thud = lowpass(noise(seconds), 400) * env_ad(len(t), 0.001, 0.03) * 2.0
+    spray = band(noise(seconds), 800, 5000) * env_ad(len(t), 0.01, 0.09) * 0.5
+    return thud + spray
+
+
+def impact_glass(variant):
+    """Bullet through glass: a crack and tinkling shards."""
+    seconds = 1.2
+    t = t_axis(seconds)
+    crack = highpass(noise(seconds), 2500) * env_ad(len(t), 0.0002, 0.01) * 2.0
+    shards = np.zeros_like(t)
+    for _ in range(40):
+        i = rng.integers(int(SR * 0.01), int(SR * 0.8))
+        f = rng.uniform(3000, 9000)
+        n = 900
+        shards[i:i + n] += np.sin(2 * np.pi * f * np.arange(n) / SR) * np.exp(-np.arange(n) / 150) * rng.uniform(0.05, 0.3)
+    return room_tail(crack + shards, seconds=0.5, tau=0.15, mix=0.2)
+
+
+def impact_flesh(variant):
+    """Bullet hitting a body: a short wet thwack (shorter and sharper than the melee hit)."""
+    seconds = 0.35
+    t = t_axis(seconds)
+    thwack = np.sin(2 * np.pi * np.cumsum(140 * np.exp(-t * 25) + 60) / SR) * np.exp(-t / 0.05) * 1.5
+    slap = band(noise(seconds), 400, 2500) * env_ad(len(t), 0.0005, 0.02)
+    wet = band(noise(seconds), 600 + 200 * variant, 1800) * env_ad(len(t), 0.01, 0.05) * 0.4
+    return thwack + slap + wet
+
+
+def ricochet(variant):
+    """A bullet glancing off: a tink and the falling whine of it tumbling away."""
+    seconds = 0.8
+    t = t_axis(seconds)
+    f = (3200 + 700 * variant) * np.exp(-t * 1.6) + 900
+    whine = np.sin(2 * np.pi * np.cumsum(f) / SR) * env_ad(len(t), 0.01, 0.25) * 0.8
+    whine += band(noise(seconds), 2000, 6000) * env_ad(len(t), 0.01, 0.2) * 0.2
+    tink = highpass(noise(seconds), 3000) * env_ad(len(t), 0.0002, 0.004) * 1.5
+    return tink + whine
+
+
+def door_open(variant):
+    """Steel door: latch clack, then a short hinge creak as it swings."""
+    seconds = 1.1
+    t = t_axis(seconds)
+    latch = band(rng.standard_normal(len(t)), 1500, 6000) * env_ad(len(t), 0.0005, 0.012) * 1.4
+    latch += _modes(t, 900, [1.0, 2.4], [0.03, 0.02]) * 0.4
+    f = 380 + 60 * variant + 120 * np.sin(2 * np.pi * 1.3 * t)
+    creak = np.sign(np.sin(2 * np.pi * np.cumsum(f) / SR)) * 0.25
+    creak = band(creak, 300, 3000) * np.clip((t - 0.12) / 0.1, 0, 1) * np.exp(-np.clip(t - 0.2, 0, None) / 0.35)
+    return room_tail(latch + creak * (0.7 if variant else 0.45), seconds=0.5, tau=0.14, mix=0.25)
+
+
+def door_close():
+    """Steel door shutting: a heavy thunk and the latch catching."""
+    seconds = 0.9
+    t = t_axis(seconds)
+    thunk = lowpass(rng.standard_normal(len(t)), 250) * env_ad(len(t), 0.002, 0.06) * 2.0
+    thunk += _modes(t, 110, [1.0, 2.7, 4.1], [0.12, 0.07, 0.04], [1, .5, .3]) * 0.8
+    latch = np.roll(band(rng.standard_normal(len(t)), 1800, 6000) * env_ad(len(t), 0.0005, 0.01), int(SR * 0.03))
+    return room_tail(thunk + latch, seconds=0.7, tau=0.2, mix=0.3)
+
+
+def door_slam():
+    """A steel door flung open into its stop: a big boom and a ringing rattle."""
+    seconds = 1.6
+    t = t_axis(seconds)
+    boom = lowpass(rng.standard_normal(len(t)), 300) * env_ad(len(t), 0.001, 0.09) * 2.5
+    ring = _modes(t, 140, [1.0, 2.3, 3.8, 5.9], [0.4, 0.25, 0.15, 0.1], [1, .6, .4, .3]) * 0.9
+    rattle = band(rng.standard_normal(len(t)), 2000, 7000) * env_ad(len(t), 0.002, 0.12) * 0.4
+    return room_tail(boom + ring + rattle, seconds=1.0, tau=0.3, mix=0.35)
+
+
+def door_locked():
+    """Trying a locked door: the handle and latch rattling twice against the strike."""
+    seconds = 0.8
+    t = t_axis(seconds)
+    x = np.zeros_like(t)
+    for start in (0.0, 0.18, 0.36):
+        clack = band(rng.standard_normal(len(t)), 1200, 5000) * env_ad(len(t), 0.0005, 0.015)
+        clack += _modes(t, 700, [1.0, 2.2], [0.03, 0.02]) * 0.3
+        x += np.roll(clack, int(SR * start)) * (1.0 if start == 0.0 else 0.75)
+    return room_tail(x, seconds=0.4, tau=0.12, mix=0.2)
+
+
+def pickup_mag():
+    """Picking up a pistol magazine: a metallic clack and it sliding into the pouch."""
+    seconds = 0.6
+    t = t_axis(seconds)
+    clack = _modes(t, 1400, [1.0, 2.1, 3.3], [0.04, 0.03, 0.02]) * 0.7
+    clack += highpass(rng.standard_normal(len(t)), 3000) * env_ad(len(t), 0.0003, 0.006)
+    slide = band(rng.standard_normal(len(t)), 800, 4000) * env_ad(len(t), 0.05, 0.12) * 0.3
+    return clack + np.roll(slide, int(SR * 0.12))
+
+
+def pickup_bandage():
+    """Tearing a bandage wrapper open and unrolling it."""
+    seconds = 1.0
+    t = t_axis(seconds)
+    tear = band(rng.standard_normal(len(t)), 1500, 8000) * env_ad(len(t), 0.02, 0.15) * 0.8
+    tear *= 1 + 0.6 * np.sign(np.sin(2 * np.pi * 37 * t))
+    rustle = band(rng.standard_normal(len(t)), 600, 4000) * env_ad(len(t), 0.2, 0.3) * 0.3
+    return tear + np.roll(rustle, int(SR * 0.2))
+
+
+def pickup_gear():
+    """Generic gear: the torch battery clicking in."""
+    seconds = 0.5
+    t = t_axis(seconds)
+    out = band(rng.standard_normal(len(t)), 1500, 6000) * env_ad(len(t), 0.0005, 0.01)
+    snap = np.roll(_modes(t, 2100, [1.0, 2.6], [0.02, 0.015]) * 0.6
+                   + highpass(rng.standard_normal(len(t)), 3500) * env_ad(len(t), 0.0003, 0.005), int(SR * 0.18))
+    return out + snap
+
+
+def heartbeat_loop(bpm=66, beats=9):
+    """Your own heartbeat as you hear it when scared: a low lub-DUB thump, felt more than heard.
+    Loops seamlessly; the game pitches it up to speed it up."""
+    period = 60.0 / bpm
+    seconds = period * beats
+    n = int(SR * seconds)
+    out = np.zeros(n)
+    def thump(f0, tau, amp):
+        t = t_axis(0.25)
+        x = np.sin(2 * np.pi * np.cumsum(f0 * (1 + 0.6 * np.exp(-t * 40))) / SR) * np.exp(-t / tau)
+        x += lowpass(rng.standard_normal(len(t)), 120) * np.exp(-t / (tau * 0.6)) * 0.3
+        return x * amp
+    lub, dub = thump(48, 0.05, 1.0), thump(58, 0.04, 0.75)
+    for b in range(beats):
+        i = int(SR * b * period)
+        out[i:i + len(lub)] += lub[: n - i]
+        j = i + int(SR * 0.28)
+        out[j:j + len(dub)] += dub[: max(0, n - j)]
+    return lowpass(out, 400)
+
+
+def breath_heavy_loop(seconds=8.0, rate_hz=0.95):
+    """Out-of-breath panting heard from inside the head: breathy noise shaped into in/out
+    breaths (out louder and lower), a little throat rasp. Loops seamlessly."""
+    t = t_axis(seconds)
+    cycles = int(round(seconds * rate_hz))
+    rate = cycles / seconds                       # whole number of breaths per loop
+    phase = (t * rate) % 1.0
+    # inhale 0..0.42, exhale 0.48..0.95
+    inhale = np.clip(np.sin(np.pi * np.clip(phase / 0.42, 0, 1)), 0, 1) ** 1.5 * (phase < 0.42)
+    exh_p = np.clip((phase - 0.48) / 0.47, 0, 1)
+    exhale = np.sin(np.pi * exh_p) ** 1.2 * ((phase >= 0.48) & (phase < 0.95))
+    air_in = band(noise(seconds), 900, 5500, order=2) * inhale * 0.55
+    air_out = band(noise(seconds), 400, 3200, order=2) * exhale
+    rasp = band(noise(seconds), 150, 600, order=2) * exhale * 0.35
+    x = air_in + air_out + rasp
+    x = lowpass(x, 7000)
+    # remove the filter start-up so the seam is clean
+    xf = int(SR * 0.05)
+    x[:xf] *= np.linspace(0, 1, xf)
+    x[-xf:] *= np.linspace(1, 0, xf)
+    return x
+
 def build_audio():
     os.makedirs(AUDIO_DIR, exist_ok=True)
     save_wav("SW_Melee_Whoosh_01", whoosh(0.38, 900, 450))
@@ -224,10 +484,159 @@ def build_audio():
     save_wav("SW_Gun_Shot", gunshot())
     save_wav("SW_Gun_DryFire", click(0.15, 2800, 0.006))
     save_wav("SW_Gun_Reload", reload_sound())
+    save_wav("SW_Torch_Click", torch_click(), peak=0.6)
     for v in range(4):
         save_wav(f"SW_Footstep_Concrete_0{v + 1}", footstep(v))
     save_wav("SW_Player_Hurt", player_hurt())
     save_wav("SW_Ambience_BodycamHiss_Loop", bodycam_hiss_loop(), peak=0.35)
+    build_realism_audio()
+    build_facility_audio()
+
+
+def build_realism_audio():
+    """Footsteps per surface, bullet impacts, ricochets, breathing (realism pass, Nov 2026).
+    Own generator so (re)making these never changes the original sounds above."""
+    global rng
+    rng = np.random.default_rng(2611)
+    for v in range(4):
+        save_wav(f"SW_Footstep_Metal_0{v + 1}", footstep_metal(v))
+    for v in range(3):
+        save_wav(f"SW_Footstep_Wood_0{v + 1}", footstep_wood(v))
+        save_wav(f"SW_Footstep_Dirt_0{v + 1}", footstep_dirt(v), peak=0.75)
+        save_wav(f"SW_Footstep_Grass_0{v + 1}", footstep_grass(v), peak=0.6)
+        save_wav(f"SW_Impact_Concrete_0{v + 1}", impact_concrete(v))
+        save_wav(f"SW_Impact_Metal_0{v + 1}", impact_metal(v), peak=0.8)
+        save_wav(f"SW_Impact_Wood_0{v + 1}", impact_wood(v))
+    for v in range(2):
+        save_wav(f"SW_Impact_Dirt_0{v + 1}", impact_dirt(v), peak=0.75)
+        save_wav(f"SW_Impact_Glass_0{v + 1}", impact_glass(v), peak=0.8)
+        save_wav(f"SW_Impact_Flesh_0{v + 1}", impact_flesh(v))
+        save_wav(f"SW_Ricochet_0{v + 1}", ricochet(v), peak=0.7)
+    save_wav("SW_Breath_Heavy_Loop", breath_heavy_loop(), peak=0.7)
+    save_wav("SW_Heartbeat_Loop", heartbeat_loop(), peak=0.85)
+    # doors and pickups
+    save_wav("SW_Door_Open_01", door_open(0))
+    save_wav("SW_Door_Open_02", door_open(1))
+    save_wav("SW_Door_Close_01", door_close())
+    save_wav("SW_Door_Slam_01", door_slam())
+    save_wav("SW_Door_Locked_01", door_locked(), peak=0.8)
+    save_wav("SW_Pickup_Mag_01", pickup_mag(), peak=0.7)
+    save_wav("SW_Pickup_Bandage_01", pickup_bandage(), peak=0.6)
+    save_wav("SW_Pickup_Gear_01", pickup_gear(), peak=0.7)
+
+
+def terminal_accept():
+    """Facility terminal accepting a card / command: two rising beeps through a small speaker."""
+    seconds = 0.5
+    t = t_axis(seconds)
+    x = np.zeros_like(t)
+    for start, hz in ((0.0, 1320.0), (0.11, 1760.0)):
+        tt = np.clip(t - start, 0, None)
+        gate = (t >= start) & (t < start + 0.085)
+        tone = np.sign(np.sin(2 * np.pi * hz * tt)) * 0.35 + np.sin(2 * np.pi * hz * tt)
+        x += tone * gate * np.exp(-tt / 0.2)
+    x = band(x, 500, 5000, order=2)     # tinny speaker
+    return room_tail(x, seconds=0.4, tau=0.12, mix=0.2)
+
+
+def terminal_deny():
+    """Access denied: two low square-wave buzzes."""
+    seconds = 0.7
+    t = t_axis(seconds)
+    x = np.zeros_like(t)
+    for start in (0.0, 0.26):
+        tt = np.clip(t - start, 0, None)
+        gate = (t >= start) & (t < start + 0.18)
+        x += np.sign(np.sin(2 * np.pi * 220 * tt)) * gate
+    x = band(x, 180, 3500, order=2)
+    return room_tail(x, seconds=0.4, tau=0.12, mix=0.2)
+
+
+def power_on():
+    """Backup power: a heavy breaker clunk, relays clicking along the line, then mains hum
+    swelling up as the generator takes the load."""
+    seconds = 3.2
+    t = t_axis(seconds)
+    clunk = lowpass(rng.standard_normal(len(t)), 300) * env_ad(len(t), 0.002, 0.08) * 2.2
+    clunk += _modes(t, 95, [1.0, 2.6, 4.3], [0.15, 0.08, 0.05], [1, .5, .3])
+    relays = np.zeros_like(t)
+    for k in range(6):
+        start = 0.25 + 0.09 * k + rng.uniform(-0.02, 0.02)
+        c = band(rng.standard_normal(len(t)), 1500, 6000) * env_ad(len(t), 0.0005, 0.008)
+        relays += np.roll(c, int(SR * start)) * 0.5
+    rise = np.clip((t - 0.3) / 1.6, 0, 1) ** 1.5
+    hum = sum(np.sin(2 * np.pi * 50 * h * t) / h for h in (1, 2, 3, 4, 6)) * 0.25 * rise
+    hum += band(rng.standard_normal(len(t)), 80, 400, order=2) * 0.08 * rise
+    return room_tail(clunk + relays + hum, seconds=0.9, tau=0.3, mix=0.3)
+
+
+def blast_door_open():
+    """Heavy security door lifting: motor whine winding up, steel grinding in its tracks,
+    rumble, and a deep clank when it hits the top stop."""
+    seconds = 3.4
+    t = t_axis(seconds)
+    run = np.clip(t / 0.4, 0, 1) * np.clip((2.8 - t) / 0.2, 0, 1)
+    f = 140 + 90 * np.clip(t / 0.8, 0, 1)
+    whine = np.sin(2 * np.pi * np.cumsum(f) / SR) * 0.35 + np.sin(2 * np.pi * np.cumsum(f * 3.02) / SR) * 0.12
+    grind = band(rng.standard_normal(len(t)), 600, 2600) * (0.6 + 0.4 * np.sin(2 * np.pi * 7.3 * t)) * 0.35
+    rumble = lowpass(rng.standard_normal(len(t)), 120) * 1.2
+    body = (whine + grind + rumble) * run
+    stop = np.roll(lowpass(rng.standard_normal(len(t)), 260) * env_ad(len(t), 0.002, 0.1) * 3.0
+                   + _modes(t, 120, [1.0, 2.4, 3.9], [0.3, 0.2, 0.12], [1, .6, .4]) * 1.2, int(SR * 2.8))
+    return room_tail(body + stop, seconds=1.0, tau=0.35, mix=0.35)
+
+
+def decon_hiss():
+    """Decontamination spray: a valve thump then pressurised mist hissing, with a slow flutter."""
+    seconds = 5.0
+    t = t_axis(seconds)
+    valve = lowpass(rng.standard_normal(len(t)), 400) * env_ad(len(t), 0.002, 0.05) * 1.5
+    env = np.clip((t - 0.05) / 0.25, 0, 1) * np.clip((4.8 - t) / 0.6, 0, 1)
+    hiss = highpass(rng.standard_normal(len(t)), 2500) * env * (0.8 + 0.2 * np.sin(2 * np.pi * 3.1 * t))
+    spray = band(rng.standard_normal(len(t)), 900, 3000) * env * 0.3
+    return room_tail(valve + hiss + spray, seconds=0.6, tau=0.2, mix=0.25)
+
+
+def alarm_loop(cycles=4, period=1.1):
+    """Containment breach klaxon: a harsh two-tone whoop (rises then cuts), looping seamlessly."""
+    seconds = cycles * period
+    t = t_axis(seconds)
+    phase = (t % period) / period
+    on = phase < 0.78
+    f = 480 + 420 * np.clip(phase / 0.78, 0, 1)
+    ph = 2 * np.pi * np.cumsum(f) / SR
+    tone = (np.sign(np.sin(ph)) * 0.5 + np.sin(ph) + 0.4 * np.sin(2 * ph)) * on
+    tone *= np.clip(phase / 0.02, 0, 1) * np.clip((0.78 - phase) / 0.03, 0, 1)
+    x = band(tone, 300, 4500, order=2)
+    xf = int(SR * 0.02)
+    x[:xf] *= np.linspace(0, 1, xf)
+    x[-xf:] *= np.linspace(1, 0, xf)
+    return x
+
+
+def light_pop():
+    """Overloaded tubes giving up: an electrical crackle and a glassy pop."""
+    seconds = 1.0
+    t = t_axis(seconds)
+    crackle = band(rng.standard_normal(len(t)), 2000, 9000) * (rng.random(len(t)) < 0.02) * 3.0
+    crackle *= np.clip((0.45 - t) / 0.45, 0, 1)
+    pop = np.roll(highpass(rng.standard_normal(len(t)), 1500) * env_ad(len(t), 0.0005, 0.02) * 1.6
+                  + _modes(t, 2600, [1.0, 1.7, 2.9], [0.05, 0.04, 0.03], [1, .6, .4]) * 0.5, int(SR * 0.35))
+    buzz = np.sin(2 * np.pi * 100 * t) * np.clip((0.35 - t) / 0.35, 0, 1) * 0.3
+    return room_tail(crackle + pop + buzz, seconds=0.6, tau=0.2, mix=0.3)
+
+
+def build_facility_audio():
+    """A-07 mission sounds (Nov 2026). Own generator so they never change the sounds above."""
+    global rng
+    rng = np.random.default_rng(2612)
+    save_wav("SW_Terminal_Accept_01", terminal_accept(), peak=0.6)
+    save_wav("SW_Terminal_Deny_01", terminal_deny(), peak=0.55)
+    save_wav("SW_Power_On_01", power_on(), peak=0.85)
+    save_wav("SW_BlastDoor_Open_01", blast_door_open(), peak=0.85)
+    save_wav("SW_Decon_Hiss_01", decon_hiss(), peak=0.6)
+    save_wav("SW_Alarm_Loop", alarm_loop(), peak=0.7)
+    save_wav("SW_Light_Pop_01", light_pop(), peak=0.75)
 
 
 # ============================================================ texture helpers
