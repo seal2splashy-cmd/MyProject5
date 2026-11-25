@@ -61,15 +61,16 @@ PICKUPS = [
     ("A07_Pickup_Battery_Tunnel", "BATTERY", (14200, -560, 0)),
 ]
 
-# mission device label -> (HUD label, panel yaw: which way its screen faces)
+# mission device label -> (HUD label, panel yaw: which way its screen faces, action, position, reach)
+# Same spots as Tools/build_a07_expanded_ue58.py; any that are missing get spawned here.
 DEVICES = {
-    "A07_MaintenanceAccessCard": ("Maintenance access card", 90.0),
-    "A07_BackupPower": ("Backup power breaker", 90.0),
-    "A07_SecurityDoor": ("Security door reader", 0.0),      # auto-placed beside the doorway
-    "A07_Decontamination": ("Decontamination control", 90.0),
-    "A07_ObservationConsole": ("Observation terminal", 180.0),
-    "A07_ContainmentConsole": ("Containment console", 180.0),
-    "A07_EmergencyExtraction": ("Extraction beacon", 180.0),
+    "A07_MaintenanceAccessCard": ("Maintenance access card", 90.0, "ACCESS_CARD", (530, -700, 115), 240),
+    "A07_BackupPower": ("Backup power breaker", 90.0, "RESTORE_POWER", (3250, -980, 125), 240),
+    "A07_SecurityDoor": ("Security door reader", 0.0, "RESTRICTED_DOOR", (4610, 0, 140), 320),  # reader auto-placed beside the doorway
+    "A07_Decontamination": ("Decontamination control", 90.0, "DECONTAMINATION", (5520, -365, 115), 240),
+    "A07_ObservationConsole": ("Observation terminal", 180.0, "OBSERVATION_CONSOLE", (6820, 1150, 130), 240),
+    "A07_ContainmentConsole": ("Containment console", 180.0, "CONTAINMENT_CONSOLE", (10550, 0, 125), 240),
+    "A07_EmergencyExtraction": ("Extraction beacon", 180.0, "EXTRACTION", (15000, -900, 135), 240),
 }
 
 MISSION_SOUNDS = ["SW_Terminal_Accept_01", "SW_Terminal_Deny_01", "SW_Power_On_01", "SW_BlastDoor_Open_01",
@@ -175,6 +176,12 @@ def import_mission_sounds():
         lib.save_loaded_asset(alarm)
 
 
+def facility_action(name):
+    """EFacilityAction in Python is unreal.FacilityAction (Unreal drops the E), members UPPER_SNAKE."""
+    enum = getattr(unreal, "FacilityAction", None) or getattr(unreal, "EFacilityAction", None)
+    return getattr(enum, name, None) if enum else None
+
+
 def main():
     world = editor.get_editor_world()
     name = world.get_name() if world else "(none)"
@@ -248,16 +255,35 @@ def main():
     # 4. mission devices
     console_mesh = level.get("A07_MeshyControlConsole")
     has_meshy_console = bool(console_mesh and console_mesh.static_mesh_component.get_editor_property("static_mesh"))
-    for label, (nice, yaw) in DEVICES.items():
+    devices_new = 0
+    for label, (nice, yaw, action, xyz, reach) in DEVICES.items():
         point = level.get(label)
         if point is None:
-            warn("mission device %s isn't in the level (rerun build_a07_expanded_ue58.py)" % label)
-            continue
+            value = facility_action(action)
+            if value is None:
+                unreal.log_error("[A07 Playable] can't find the FacilityAction enum - is the C++ built?")
+                break
+            point = spawn(classes["point"], label, xyz)
+            if point is None:
+                continue
+            set_prop(point, ["action"], value)
+            set_prop(point, ["reach_distance"], float(reach))
+            devices_new += 1
         set_prop(point, ["label"], nice)
         set_prop(point, ["panel_yaw"], float(yaw))
         if label == "A07_ObservationConsole":
             set_prop(point, ["show_panel", "b_show_panel", "bShowPanel"], not has_meshy_console)
         # set_editor_property already re-runs the construction (so the device rebuilds in the viewport)
+
+    # the chamber's invisible centre block: give it a body if the Meshy vessel isn't there,
+    # otherwise it's an invisible wall in the middle of the room
+    centre = level.get("A07_CentralSimpleCollision")
+    if centre is not None and "A07_MeshyContainmentVessel" not in level:
+        centre.static_mesh_component.set_visibility(True)
+        steel = lib.load_asset("/Game/ForestResearch/Materials/M_FR_Steel")
+        if steel:
+            centre.static_mesh_component.set_material(0, steel)
+        log("no Meshy containment vessel imported: the chamber's centre block is shown as a steel placeholder")
 
     # 5. the security door slab
     slab = level.get("A07_RestrictedVisualDoor")
@@ -334,7 +360,8 @@ def main():
             nav.set_actor_scale3d(unreal.Vector(61, 27, 5.5))
     unreal.SystemLibrary.execute_console_command(world, "RebuildNavigation")
 
-    log("done: %d new doors, %d new pickups, devices/lights/director updated, NavMesh rebuilding." % (doors_new, pickups_new))
+    log("done: %d new mission devices, %d new doors, %d new pickups; lights/director updated, NavMesh rebuilding."
+        % (devices_new, doors_new, pickups_new))
     log("Press P in the viewport to check the green NavMesh runs through every doorway, then Ctrl+S.")
 
 

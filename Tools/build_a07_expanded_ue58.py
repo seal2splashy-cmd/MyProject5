@@ -181,7 +181,8 @@ def meshy(label, path, xy_bottom, max_size, yaw=0.0):
 
 def interaction(label, action_key, pos, reach=240):
     cls = unreal.load_class(None, "/Script/MyProject5.FacilityInteractionPoint")
-    enum_cls = getattr(unreal, "EFacilityAction", None)
+    # Unreal's Python drops the E: EFacilityAction is unreal.FacilityAction
+    enum_cls = getattr(unreal, "FacilityAction", None) or getattr(unreal, "EFacilityAction", None)
     if not cls or enum_cls is None:
         warn("Mission C++ classes unavailable. Compile the project to spawn interactables.")
         return
@@ -202,7 +203,7 @@ def interaction(label, action_key, pos, reach=240):
         setprop(p,"action",val)
         setprop(p,"label",label.replace("A07_","").replace("_"," "))
         setprop(p,"reach_distance",float(reach))
-        log("Interactable: G -> %s" % action_key)
+        log("Interactable: F/G -> %s" % action_key)
 
 def corridor(label,x0,x1,y0,y1,height=330):
     # The corridor is open at both x ends, unlike an enclosed room.
