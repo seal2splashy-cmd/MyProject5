@@ -34,7 +34,8 @@
   places doors + pickups in the forest maps
 - AFacilityMissionDirector - the A-07 mission: 7 ordered steps (card, power, security door, decon, observation log,
   containment -> breach, extraction), HUD text, light roles by tag (AH_PoweredLight/EmergencyLight/FlickerLight),
-  lifting security slab, airlock door lock, breach alarm + Gaunt release, checkpoints, restart (Docs/A07_PLAYABLE.md)
+  lifting security slab, airlock door lock, breach alarm + Gaunt release, checkpoints, restart, light buzz +
+  AH_MachineHum generator rumble (Docs/A07_PLAYABLE.md)
 - AFacilityInteractionPoint - an AAHInteractable mission device built from engine shapes (lockbox, breaker,
   card reader, decon panel, terminal, beacon) with a red/amber-pulse/green status light; F or G
 - UAHMissionProgress - GameInstance subsystem holding the mission checkpoint across the death reload
@@ -66,7 +67,10 @@
 - Meshy arms: Assets/Meshy/arms/ (FBX + PNGs) -> Tools/build_meshy_arms_blender.py fits them onto the operator
   rig -> Assets/OperatorArmsMeshy/SK_AH_OperatorArms_Meshy.fbx + T_AH_MeshyArms_*; Tools/import_meshy_arms_ue58.py.
 - A-07 map: duplicate AH_ForestResearch_MeshyPass01 as AH_ForestResearch_A07_Expanded, run
-  Tools/build_a07_expanded_ue58.py then Tools/setup_a07_playable_ue58.py (doors, pickups, tags, Gaunt, sounds, NavMesh).
+  Tools/build_a07_expanded_ue58.py, Tools/setup_a07_playable_ue58.py (doors, pickups, tags, Gaunt, sounds, NavMesh),
+  then Tools/dress_a07_ue58.py (Meshy props + invisible collision boxes, light fittings, generator/light hum tags,
+  reverb Audio Volumes, asset inventory in Saved/AH_AssetInventory.txt).
+- Content/ is not in git: Claude only sees assets pushed under Assets/ (and Saved/AH_AssetInventory.txt if sent).
 
 ## Controls
 WASD move, Shift sprint, Ctrl crouch (slide while sprinting), Space jump, Q/E head tilt, Z/C lean,
@@ -75,7 +79,7 @@ F use (doors, pickups, mission devices; G also works on mission devices), T torc
 
 ## Still to do
 - One/two-hand grip modes for melee
-- Room reverb volumes (sounds have baked room tails for now), rolling-shutter lens effect
+- Rolling-shutter lens effect; reverb volumes exist only in the A-07 map so far (Tools/dress_a07_ue58.py)
 
 ## History
 Source was lost in Oct 2026 and rebuilt from chat history. MyFPSPawn/AGun/MyHUD/MyGameMode are

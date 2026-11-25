@@ -626,6 +626,38 @@ def light_pop():
     return room_tail(crackle + pop + buzz, seconds=0.6, tau=0.2, mix=0.3)
 
 
+def light_hum_loop(seconds=4.0):
+    """Fluorescent tube + ballast: 100 Hz mains buzz with rough harmonics and a faint
+    high-frequency hiss, slowly wavering. Whole cycles of everything, so it loops cleanly."""
+    t = t_axis(seconds)
+    x = np.zeros_like(t)
+    for h, a in ((1, 1.0), (2, 0.55), (3, 0.4), (4, 0.18), (6, 0.12), (8, 0.06)):
+        x += a * np.sin(2 * np.pi * 100 * h * t + h * 0.7)
+    x = np.tanh(1.8 * x)                                   # ballast grit
+    x *= 0.85 + 0.15 * np.sin(2 * np.pi * 0.5 * t)         # slow waver (2 cycles per loop)
+    hiss = band(noise(seconds), 4000, 9000, order=2) * 0.04
+    hiss[: int(SR * 0.05)] *= np.linspace(0, 1, int(SR * 0.05))
+    hiss[-int(SR * 0.05):] *= np.linspace(1, 0, int(SR * 0.05))
+    return x + hiss
+
+
+def machine_loop(seconds=6.0):
+    """Diesel generator running: low firing thump (~25 Hz pulses), engine rumble, a belt/
+    alternator whine and some mechanical rattle. Loops cleanly (whole cycles)."""
+    t = t_axis(seconds)
+    fire = 25.0                                            # 1500 rpm, 2 cylinders firing
+    pulses = np.maximum(0, np.sin(2 * np.pi * fire * t)) ** 6
+    thump = lowpass(pulses, 180) * 2.0
+    rumble = sum(a * np.sin(2 * np.pi * f * t) for f, a in ((50, 0.6), (75, 0.3), (100, 0.25), (150, 0.1)))
+    whine = np.sin(2 * np.pi * 900 * t) * 0.04 + np.sin(2 * np.pi * 1800 * t) * 0.015
+    rattle = band(noise(seconds), 800, 3000, order=2) * (0.4 + 0.6 * pulses) * 0.12
+    x = thump + rumble + whine + rattle
+    xf = int(SR * 0.03)
+    x[:xf] *= np.linspace(0, 1, xf)
+    x[-xf:] *= np.linspace(1, 0, xf)
+    return x
+
+
 def build_facility_audio():
     """A-07 mission sounds (Nov 2026). Own generator so they never change the sounds above."""
     global rng
@@ -637,6 +669,8 @@ def build_facility_audio():
     save_wav("SW_Decon_Hiss_01", decon_hiss(), peak=0.6)
     save_wav("SW_Alarm_Loop", alarm_loop(), peak=0.7)
     save_wav("SW_Light_Pop_01", light_pop(), peak=0.75)
+    save_wav("SW_LightHum_Loop", light_hum_loop(), peak=0.5)
+    save_wav("SW_Machine_Loop", machine_loop(), peak=0.8)
 
 
 # ============================================================ texture helpers

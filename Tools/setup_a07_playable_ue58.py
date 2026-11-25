@@ -74,7 +74,7 @@ DEVICES = {
 }
 
 MISSION_SOUNDS = ["SW_Terminal_Accept_01", "SW_Terminal_Deny_01", "SW_Power_On_01", "SW_BlastDoor_Open_01",
-                  "SW_Decon_Hiss_01", "SW_Alarm_Loop", "SW_Light_Pop_01"]
+                  "SW_Decon_Hiss_01", "SW_Alarm_Loop", "SW_Light_Pop_01", "SW_LightHum_Loop", "SW_Machine_Loop"]
 AUDIO_DST = "/Game/Generated/Audio"
 
 FLICKER_LIGHTS = ["FR_HallLight_2050", "FR_HallLight_3250", "FR_MaintenanceLamp", "A07_RedTunnelExit"]
@@ -170,10 +170,13 @@ def import_mission_sounds():
     if tasks:
         unreal.AssetToolsHelpers.get_asset_tools().import_asset_tasks(tasks)
         log("imported %d mission sounds" % len(tasks))
-    alarm = lib.load_asset(AUDIO_DST + "/SW_Alarm_Loop") if lib.does_asset_exist(AUDIO_DST + "/SW_Alarm_Loop") else None
-    if alarm:
-        set_prop(alarm, ["looping"], True)
-        lib.save_loaded_asset(alarm)
+    for name in MISSION_SOUNDS:
+        if not name.endswith("_Loop") or not lib.does_asset_exist(AUDIO_DST + "/" + name):
+            continue
+        wave = lib.load_asset(AUDIO_DST + "/" + name)
+        if wave:
+            set_prop(wave, ["looping"], True)
+            lib.save_loaded_asset(wave)
 
 
 def facility_action(name):

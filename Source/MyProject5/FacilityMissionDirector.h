@@ -16,6 +16,9 @@
 //   AH_RestrictedVisualDoor  the security door slab that lifts away
 //   AH_DeconLockedDoor     AAHDoor(s) unlocked + opened when decontamination finishes
 //   AH_ExtractionDoor      AAHDoor(s) opened when you signal extraction
+//   AH_MachineHum          generators / machinery that start rumbling when power is restored
+//
+// Powered lights buzz quietly while they're on (SW_LightHum_Loop) and go silent when the power dies.
 
 #pragma once
 
@@ -49,6 +52,7 @@ struct FAHManagedLight
     float FxDuration = 0.f;
     float NextFlicker = 0.f;   // ambient flicker countdown
     float FlickerLeft = 0.f;
+    TWeakObjectPtr<UAudioComponent> Hum;   // fluorescent buzz while a powered light is on
 };
 
 UCLASS()
@@ -115,6 +119,14 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mission", meta = (ClampMin = 0.2))
     float RestrictedDoorOpenTime = 2.6f;
 
+    /** Fluorescent buzz under each powered light (0 = off). */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mission|Ambience", meta = (ClampMin = 0))
+    float LightHumVolume = 0.3f;
+
+    /** Generator rumble from AH_MachineHum actors once power is back (0 = off). */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mission|Ambience", meta = (ClampMin = 0))
+    float MachineHumVolume = 0.8f;
+
     /** How far away the breach alarm is heard (by you and by enemies). */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mission")
     float AlarmRange = 6000.f;
@@ -160,6 +172,10 @@ private:
     UPROPERTY()
     UAudioComponent* AlarmAudio = nullptr;
 
+    TArray<TWeakObjectPtr<AActor>> Machines;
+    TArray<TWeakObjectPtr<UAudioComponent>> MachineAudio;
+    bool bMachinesRunning = false;
+
     void Initialise();
     void RestoreCheckpoint();
     void ApplyStageInstant(int32 InStage);
@@ -179,6 +195,8 @@ private:
 
     void SetPoweredLights(bool bOn, bool bInstant = false);
     void TickLights(float DeltaSeconds);
+    void SetLightHum(FAHManagedLight& M, bool bOn);
+    void StartMachines(bool bInstant);
     void StartRestrictedDoor(AFacilityInteractionPoint* Point, bool bInstant);
     void TickRestrictedDoor(float DeltaSeconds);
     void OpenRestrictedVisualDoor();

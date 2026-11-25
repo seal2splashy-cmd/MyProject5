@@ -13,7 +13,10 @@ with an anomaly in the original facility and a breach set piece in the new wing.
 4. With that map open, run **`Tools/setup_a07_playable_ue58.py`**. Then press **P** in the viewport:
    the green NavMesh should run through every doorway. **Ctrl+S**.
 
-Re-running either script is safe (labels that exist are updated, not duplicated).
+5. Then run **`Tools/dress_a07_ue58.py`** (same map open): props, light fittings, hum, reverb - see
+   "Dressing" below. P again (the NavMesh now goes round the shelves/crates/generators), Ctrl+S.
+
+Re-running any of the scripts is safe (labels that exist are updated or skipped, not duplicated).
 
 ## The mission
 
@@ -85,3 +88,46 @@ model), `Panel Offset`, `Panel Yaw` (which way the screen faces), `Pedestal`.
 - [ ] Breach: alarm, lights die, red pulse, Gaunt comes from the west of the chamber
 - [ ] Die after the breach: you wake at the containment console, alarm still going, Gaunt back
 - [ ] Beacon: tunnel exit opens, end screen, restart after 12 s
+
+## Dressing (Tools/dress_a07_ue58.py)
+
+Uses your imported Meshy assets (`/Game/ForestResearch/MeshyProps/SM_FR_*`, the A-07 modules) - and
+if they were imported somewhere else, it finds them by name.
+
+- **Asset scan:** writes every Static Mesh you've imported to `Saved/AH_AssetInventory.txt` and lists
+  the Meshy / ForestResearch / A07 folders in the Output Log. If your containment vessel, decon chamber
+  or control console are imported under another name or folder (anything with "vessel", "decon",
+  "console" in the name), they're placed where the builder wanted them; the vessel hides the steel
+  placeholder. Wrong mesh picked? Delete that actor.
+- **Props** (folder AnomalyHunter/A07_Dressing): PPE shelves, crate and RSU panel in the airlock; ducts,
+  floor grates and a biohazard sign along the spine; two workstations + a shelf in observation; crate
+  cover, shelving, high ducts, a second damaged wall and biohazard signs in the chamber; two generators,
+  racks and a crate in maintenance; ducts, grates and a crate in the tunnel; green exit signs over every
+  door on the way out; an RSU panel outside the exit.
+- **Collision:** Meshy meshes stay collision-free (far too dense), but every shelf / crate / desk /
+  generator gets an invisible box `<label>_Collision`: you, bullets and the Gaunt stop at them, the
+  NavMesh goes round them, and the chamber crates are actual cover.
+- **Light fittings:** a hanging industrial lamp (`SM_FR_HangingLight`) over each A-07 light with the
+  light moved just under it (the fitting doesn't cast shadows, so it can't trap its own light), plus
+  6 new powered lights: link corridor, spine, two more in the chamber, two in the tunnel.
+- **Sound of a working building** (C++, AFacilityMissionDirector):
+  - each powered light buzzes quietly while it's lit (`SW_LightHum_Loop`, 7 m), and goes silent the
+    instant the breach cuts the power while the tubes fade
+  - actors tagged `AH_MachineHum` (the two A-07 generators and the original generator room's) spin up
+    and rumble (`SW_Machine_Loop`, 25 m) when you restore power
+  - director settings: Light Hum Volume (0.3), Machine Hum Volume (0.8); 0 turns either off
+- **Room acoustics:** six Reverb Effect assets in `/Game/Generated/Reverb` and 15 Audio Volumes:
+
+| Space | Reverb | Feel |
+|---|---|---|
+| original rooms, observation | RE_AH_Office (0.55 s) | dead, carpet-and-ceiling-tile |
+| corridors, link, spine | RE_AH_Corridor (1.25 s) | hard flutter |
+| airlock | RE_AH_SteelAirlock (1.0 s, bright) | metallic ring |
+| generator room, maintenance | RE_AH_Plantroom (1.7 s) | concrete plant room |
+| A-07 chamber | RE_AH_Chamber (4.6 s) | 9 m concrete hall - gunshots roll on |
+| utility tunnel | RE_AH_Tunnel (2.4 s) | long echo down the tube |
+
+  Every 3D sound in the game goes through AHRealism attenuation, which sends to reverb, so footsteps,
+  doors, shots and the Gaunt all pick it up. If the Audio Volumes come out with no size (the script
+  warns), place them by hand: Place Actors > Volumes > Audio Volume, scale over the room, and in
+  Details > Reverb tick Apply Reverb and pick the RE_AH_ asset.

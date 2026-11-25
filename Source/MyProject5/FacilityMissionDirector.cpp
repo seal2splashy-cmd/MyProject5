@@ -28,6 +28,7 @@ namespace
     const FName TagDeconDoor(TEXT("AH_DeconLockedDoor"));
     const FName TagExtractionDoor(TEXT("AH_ExtractionDoor"));
     const FName TagGBound(TEXT("AH_FacilityGInputBound"));
+    const FName TagMachine(TEXT("AH_MachineHum"));
 
     constexpr int32 StepCount = 7;   // EFacilityAction values, in mission order
 
@@ -66,6 +67,14 @@ void AFacilityMissionDirector::BeginPlay()
 
 void AFacilityMissionDirector::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+    for (const TWeakObjectPtr<UAudioComponent>& Audio : MachineAudio)
+    {
+        if (Audio.IsValid())
+        {
+            Audio->Stop();
+        }
+    }
+    MachineAudio.Reset();
     if (AlarmAudio)
     {
         AlarmAudio->Stop();
@@ -130,6 +139,10 @@ void AFacilityMissionDirector::Initialise()
                 R->SetMobility(EComponentMobility::Movable);
             }
             DoorSlabs.Add(TPair<TWeakObjectPtr<AActor>, FVector>(A, A->GetActorLocation()));
+        }
+        if (A->ActorHasTag(TagMachine))
+        {
+            Machines.Add(A);
         }
         if (A->ActorHasTag(TagDeconDoor))
         {
@@ -197,6 +210,7 @@ void AFacilityMissionDirector::ApplyStageInstant(int32 InStage)
     if (Stage >= PowerDone)
     {
         SetPoweredLights(true, true);
+        StartMachines(true);
     }
     if (Stage >= DoorDone)
     {
@@ -429,6 +443,7 @@ void AFacilityMissionDirector::HandleInteraction(AFacilityInteractionPoint* Poin
         PlayFacilitySound(TEXT("SW_Power_On_01"), Where, 1.f, 3000.f);
         AEnemy::ReportNoise(this, Where, 1800.f, User);     // a generator kicking in is loud
         SetPoweredLights(true);
+        StartMachines(false);
         PushMessage(TEXT("BACKUP POWER ONLINE  |  Security access restored"), ColGood, 3.5f, true);
         CompleteStep(Point);
         break;
@@ -620,12 +635,78 @@ void AFacilityMissionDirector::SetPoweredLights(bool bOn, bool bInstant)
                 L->SetVisibility(bOn);
                 L->SetIntensity(M.BaseIntensity);
             }
+            SetLightHum(M, bOn);
         }
         else
         {
+            if (!bOn)
+            {
+                SetLightHum(M, false);      // the power's gone: the buzz stops at once, the tubes fade
+            }
             // Fluorescent tubes don't just come on: each one stutters for a moment, not in sync
             M.FxTime = 0.f;
             M.FxDuration = FMath::FRandRange(0.6f, bOn ? 1.8f : 2.6f);
+        }
+    }
+}
+
+void AFacilityMissionDirector::SetLightHum(FAHManagedLight& M, bool bOn)
+{
+    if (!bOn)
+    {
+        if (UAudioComponent* Hum = M.Hum.Get())
+        {
+            Hum->Stop();
+        }
+        M.Hum.Reset();
+        return;
+    }
+    if (M.Hum.IsValid() || LightHumVolume <= 0.f)
+    {
+        return;
+    }
+    ULightComponent* L = M.Light.Get();
+    USoundBase* Buzz = AHRealism::GeneratedSound(TEXT("SW_LightHum_Loop"));
+    if (!L || !Buzz)
+    {
+        return;
+    }
+    // Every tube buzzes slightly differently and out of step with the others
+    M.Hum = UGameplayStatics::SpawnSoundAttached(Buzz, L, NAME_None, FVector::ZeroVector,
+        EAttachLocation::KeepRelativeOffset, true,
+        LightHumVolume * FMath::FRandRange(0.8f, 1.1f), FMath::FRandRange(0.97f, 1.03f),
+        FMath::FRandRange(0.f, 3.f), AHRealism::Attenuation(700.f));
+}
+
+void AFacilityMissionDirector::StartMachines(bool bInstant)
+{
+    if (bMachinesRunning || MachineHumVolume <= 0.f)
+    {
+        return;
+    }
+    bMachinesRunning = true;
+    USoundBase* Rumble = AHRealism::GeneratedSound(TEXT("SW_Machine_Loop"));
+    if (!Rumble)
+    {
+        return;
+    }
+    for (const TWeakObjectPtr<AActor>& Weak : Machines)
+    {
+        AActor* Machine = Weak.Get();
+        if (!Machine)
+        {
+            continue;
+        }
+        UAudioComponent* Audio = UGameplayStatics::SpawnSoundAtLocation(this, Rumble, Machine->GetActorLocation(),
+            FRotator::ZeroRotator, MachineHumVolume, FMath::FRandRange(0.94f, 1.04f), FMath::FRandRange(0.f, 4.f),
+            AHRealism::Attenuation(2500.f), nullptr, false);
+        if (Audio)
+        {
+            if (!bInstant)
+            {
+                Audio->FadeIn(2.5f, MachineHumVolume);    // spinning up
+            }
+            MachineAudio.Add(Audio);
         }
     }
 }
@@ -657,6 +738,7 @@ void AFacilityMissionDirector::TickLights(float DeltaSeconds)
                     M.FxTime = -1.f;
                     L->SetVisibility(M.bTargetOn);
                     L->SetIntensity(M.BaseIntensity);
+                    SetLightHum(M, M.bTargetOn);
                 }
             }
             break;
