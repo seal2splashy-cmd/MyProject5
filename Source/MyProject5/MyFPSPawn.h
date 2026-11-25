@@ -356,6 +356,19 @@ private:
     UPROPERTY(EditAnywhere, Category = "Movement")
     float AirControl = 0.6f;
 
+    /** Tallest ledge you walk straight up without jumping: stair risers, kerbs, door sills (cm). */
+    UPROPERTY(EditAnywhere, Category = "Movement", meta = (ClampMin = 0, ClampMax = 80))
+    float MaxStepHeight = 40.f;
+
+    /** Steepest ground you can walk on, as the floor normal's Z (0.71 = 45 degrees). Ramps up to
+     *  this are walked up; steeper is a wall. Walking down slopes/stairs keeps you on them
+     *  (no little falls every step). */
+    UPROPERTY(EditAnywhere, Category = "Movement", meta = (ClampMin = 0.1, ClampMax = 1))
+    float WalkableFloorZ = 0.71f;
+
+    /** Step up onto a ledge up to MaxStepHeight while moving by Remaining. False (and nothing moved) if it can't. */
+    bool TryStepUp(const FVector& Remaining);
+
     float CurrentSpeed = 300.f;
     float DesiredSpeed = 300.f;
     FVector PlanarVelocity = FVector::ZeroVector;

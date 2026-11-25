@@ -582,6 +582,40 @@ void AMyFPSPawn::Respawn()
     UGameplayStatics::OpenLevel(this, FName(*UGameplayStatics::GetCurrentLevelName(this)));
 }
 
+bool AMyFPSPawn::TryStepUp(const FVector& Remaining)
+{
+    if (MaxStepHeight <= 0.f || Remaining.SizeSquared2D() < 0.01f)
+    {
+        return false;
+    }
+    const FVector Start = GetActorLocation();
+    auto Undo = [this, &Start]()
+    {
+        SetActorLocation(Start, false, nullptr, ETeleportType::TeleportPhysics);
+        return false;
+    };
+
+    // Up (as far as the ceiling allows), across, then back down onto the step
+    AddActorWorldOffset(FVector(0.f, 0.f, MaxStepHeight), true);
+    const float Raised = static_cast<float>(GetActorLocation().Z - Start.Z);
+    if (Raised < 2.f)
+    {
+        return Undo();
+    }
+    AddActorWorldOffset(FVector(Remaining.X, Remaining.Y, 0.f), true);
+    if (FVector::Dist2D(GetActorLocation(), Start) < Remaining.Size2D() * 0.2f)
+    {
+        return Undo();      // still blocked: it's a wall, not a step
+    }
+    FHitResult Down;
+    AddActorWorldOffset(FVector(0.f, 0.f, -(Raised + 2.f)), true, &Down);
+    if (!Down.bBlockingHit || Down.ImpactNormal.Z < WalkableFloorZ)
+    {
+        return Undo();      // nothing to stand on up there
+    }
+    return true;
+}
+
 // ------------------------------------------------------------------ weapon slots
 
 bool AMyFPSPawn::IsMeleeEquipped() const
@@ -686,15 +720,47 @@ void AMyFPSPawn::Tick(float DeltaTime)
 
             if (Hit.bBlockingHit)
             {
-                // Slide along the wall and lose the speed going into it
-                FVector WallNormal = Hit.Normal;
-                WallNormal.Z = 0.f;
-                WallNormal = WallNormal.GetSafeNormal();
-                const FVector Slide = FVector::VectorPlaneProject(Delta * (1.f - Hit.Time), WallNormal);
-                AddActorWorldOffset(Slide, true);
-                if (!WallNormal.IsNearlyZero())
+                const FVector Remaining = Delta * (1.f - Hit.Time);
+                bool bClimbed = false;
+
+                if (bIsOnGround && Hit.ImpactNormal.Z >= WalkableFloorZ && Hit.ImpactNormal.Z < 0.999f)
                 {
-                    PlanarVelocity = FVector::VectorPlaneProject(PlanarVelocity, WallNormal);
+                    // A walkable slope (ramp, stair ramp): keep the same horizontal speed and go up it
+                    const FVector N = Hit.ImpactNormal;
+                    const FVector UpSlope = Remaining + FVector(0.f, 0.f, -FVector::DotProduct(Remaining, N) / N.Z);
+                    FHitResult SlopeHit;
+                    AddActorWorldOffset(UpSlope, true, &SlopeHit);
+                    bClimbed = !SlopeHit.bBlockingHit || SlopeHit.Time > 0.05f;
+                }
+                else if (bIsOnGround && TryStepUp(Remaining))
+                {
+                    bClimbed = true;    // stair riser, kerb, sill
+                }
+
+                if (!bClimbed)
+                {
+                    // Slide along the wall and lose the speed going into it
+                    FVector WallNormal = Hit.Normal;
+                    WallNormal.Z = 0.f;
+                    WallNormal = WallNormal.GetSafeNormal();
+                    const FVector Slide = FVector::VectorPlaneProject(Remaining, WallNormal);
+                    AddActorWorldOffset(Slide, true);
+                    if (!WallNormal.IsNearlyZero())
+                    {
+                        PlanarVelocity = FVector::VectorPlaneProject(PlanarVelocity, WallNormal);
+                    }
+                }
+            }
+
+            // Walking down a slope or stairs: stay on it instead of falling a few cm every frame
+            if (bIsOnGround && !bIsJumping && Velocity.Z <= 0.f && MaxStepHeight > 0.f)
+            {
+                const FVector Here = GetActorLocation();
+                FHitResult Snap;
+                AddActorWorldOffset(FVector(0.f, 0.f, -MaxStepHeight), true, &Snap);
+                if (!Snap.bBlockingHit || Snap.ImpactNormal.Z < WalkableFloorZ)
+                {
+                    SetActorLocation(Here, false, nullptr, ETeleportType::TeleportPhysics);   // a real drop: fall
                 }
             }
         }

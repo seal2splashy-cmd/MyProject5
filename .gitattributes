@@ -6,3 +6,6 @@ Content/ForestResearch/MeshyProps/*.uasset filter=lfs diff=lfs merge=lfs -text
 # User-made Meshy A-07 containment expansion assets and texture maps
 Assets/MeshyFacility/**/*.fbx filter=lfs diff=lfs merge=lfs -text
 Assets/MeshyFacility/**/*.png filter=lfs diff=lfs merge=lfs -text
+Assets/MeshyFacility/**/*.jpg filter=lfs diff=lfs merge=lfs -text
+# The game-ready A-07 kit (all files < 8 MB) is ordinary git, not LFS
+Assets/MeshyFacility/Kit/** !filter !diff !merge binary

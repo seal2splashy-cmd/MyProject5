@@ -1,0 +1,80 @@
+{
+  "Vessel": {
+    "source": "Meshy_models_20261119_073604/Meshy_AI_ContainmentVessel_Optimized_20261119_texture_remesh_tri_5f877f8f/Meshy_AI_model.fbx",
+    "tris_before": 10240,
+    "tris_after": 10240,
+    "size_cm": [
+      243.8,
+      208.9,
+      520.0
+    ]
+  },
+  "DeconPod": {
+    "source": "Meshy_models_20261119_073604/Meshy_AI_DeconChamberHorizontal_20261119_image-to-3d-texture_84a23b1e/Meshy_AI_model.fbx",
+    "tris_before": 1968406,
+    "tris_after": 60000,
+    "size_cm": [
+      320.0,
+      124.1,
+      144.7
+    ]
+  },
+  "Console": {
+    "source": "Meshy_models_20261119_073604/Meshy_AI_LabControlConsole_Optimized_20261119_texture_remesh_tri_a9cac9a1/Meshy_AI_model.fbx",
+    "tris_before": 9235,
+    "tris_after": 9235,
+    "size_cm": [
+      190.0,
+      117.8,
+      164.6
+    ]
+  },
+  "VaultDoor": {
+    "source": "containment_entrance_/Meshy_AI_containment_entrance__1125185417_image-to-3d-texture_fbx/Meshy_AI_containment_entrance__1125185417_image-to-3d-texture.fbx",
+    "tris_before": 531454,
+    "tris_after": 120000,
+    "size_cm": [
+      230.0,
+      58.6,
+      248.4
+    ]
+  },
+  "WallPanel": {
+    "source": "damaged_concrete_wall/Meshy_AI_damaged_concrete_wall_1125185429_image-to-3d-texture_fbx/Meshy_AI_damaged_concrete_wall_1125185429_image-to-3d-texture.fbx",
+    "tris_before": 516232,
+    "tris_after": 120000,
+    "size_cm": [
+      300.0,
+      46.7,
+      353.1
+    ]
+  },
+  "MountRing": {
+    "source": "containment_mounting_/Meshy_AI_containment_mounting__1125185411_image-to-3d-texture_fbx/Meshy_AI_containment_mounting__1125185411_image-to-3d-texture.fbx",
+    "tris_before": 2936004,
+    "tris_after": 90000,
+    "size_cm": [
+      500.0,
+      499.8,
+      129.1
+    ]
+  },
+  "Catwalk": {
+    "source": "elevated_catwalk_sect/Meshy_AI_elevated_catwalk_sect_1125185422_image-to-3d-texture_fbx/Meshy_AI_elevated_catwalk_sect_1125185422_image-to-3d-texture.fbx",
+    "tris_before": 2040386,
+    "tris_after": 60000,
+    "size_cm": [
+      600.0,
+      111.0,
+      185.4
+    ],
+    "catwalk": {
+      "deck_height_cm": 76.0,
+      "deck_width_cm": 103.5,
+      "deck_length_cm": 594.9,
+      "top_cm": 185.4,
+      "width_cm": 111.0,
+      "length_cm": 600.0
+    }
+  }
+}

@@ -16,6 +16,9 @@ with an anomaly in the original facility and a breach set piece in the new wing.
 5. Then run **`Tools/dress_a07_ue58.py`** (same map open): props, light fittings, hum, reverb - see
    "Dressing" below. P again (the NavMesh now goes round the shelves/crates/generators), Ctrl+S.
 
+6. **The A-07 kit** (your Meshy models, game-ready): run `Tools/import_a07_kit_ue58.py` (any map),
+   then with the A-07 map open `Tools/build_a07_kit_level_ue58.py`. P, Ctrl+S. See "A-07 kit" below.
+
 Re-running any of the scripts is safe (labels that exist are updated or skipped, not duplicated).
 
 ## The mission
@@ -131,3 +134,47 @@ if they were imported somewhere else, it finds them by name.
   doors, shots and the Gaunt all pick it up. If the Audio Volumes come out with no size (the script
   warns), place them by hand: Place Actors > Volumes > Audio Volume, scale over the room, and in
   Details > Reverb tick Apply Reverb and pick the RE_AH_ asset.
+
+## A-07 kit (your Meshy models, made game-ready)
+
+`Tools/prepare_a07_kit_blender.py` turned the seven Meshy downloads into
+`Assets/MeshyFacility/Kit/<Name>/` (Git LFS, 71 MB): real size, pivot bottom-centre, front +Y in
+Unreal, 2K textures (`_D.jpg`, `_N.png` DirectX, `_MR.jpg` G rough / B metal), decimated where the
+scans were huge:
+
+| Kit mesh | From | Triangles | Size (cm) |
+|---|---|---|---|
+| SM_A07K_Vessel | ContainmentVessel_Optimized | 10 k (as is) | 244 x 209 x 520 |
+| SM_A07K_DeconPod | DeconChamberHorizontal | 1.97 M -> 60 k | 320 x 124 x 145 |
+| SM_A07K_Console | LabControlConsole_Optimized | 9 k (as is) | 190 x 118 x 165 |
+| SM_A07K_VaultDoor | containment_entrance ("B-7") | 531 k -> 120 k | 230 x 59 x 248 |
+| SM_A07K_WallPanel | damaged_concrete_wall | 516 k -> 120 k | 300 x 47 x 353 |
+| SM_A07K_MountRing | containment_mounting | 2.9 M -> 90 k | 500 x 500 x 129 |
+| SM_A07K_Catwalk | elevated_catwalk_sect | 2.0 M -> 60 k | 600 x 111 x 185, deck at 76 |
+
+Re-make them (e.g. a different size) with
+`blender -b -P Tools/prepare_a07_kit_blender.py -- <folder with the extracted ZIPs> [names]`.
+
+`Tools/build_a07_kit_level_ue58.py` (folder AnomalyHunter/A07_Kit):
+- **Catwalks:** north (4 sections, 24 m) and south (3 sections) along the chamber walls, deck 3 m up on
+  steel posts, each with a 30-degree steel stair from its west end: open treads, stringers, yellow
+  handrails. Collision is invisible steel boxes (deck, rails, end rail, stair ramp, stair rails), so
+  footsteps clang, you can't fall off, and the NavMesh + Gaunt follow you up. A magazine waits at the
+  end of the north run, a torch battery at the end of the south.
+- **Walls:** 33 damaged-concrete panels cladding the chamber's north / south / east walls and the
+  tunnel's north wall, each with concrete collision.
+- **Cells:** two sealed B-7 vault doors in the chamber's east wall.
+- **Vessel** in its ring at the centre of the chamber; an **empty ring** by the containment console.
+- **Consoles:** observation room (screens to the room, back to the window) and by the containment
+  ring. The mission devices move onto them (hidden panel; F still works - their collision lets the
+  F trace through).
+- **Decon pod** along the airlock's north wall.
+- Hidden (not deleted): the raw vault door the builder stood in the chamber's open doorway, the two
+  floating raw catwalks, the oversized raw decon/console/vessel, the dressing pass's north damaged wall.
+
+### Movement (C++): stairs and slopes
+`AMyFPSPawn` used to stop dead at any ramp or step (the wall-slide flattened the hit). Now:
+- **slopes** up to `WalkableFloorZ` (0.71 = 45 degrees) are walked up at full horizontal speed,
+- **steps** up to `MaxStepHeight` (40 cm) are stepped onto (stairs, kerbs, sills),
+- going **down** slopes/stairs keeps you on them instead of tiny falls (no landing thuds per step).
+Both are under Details > Movement on the pawn.

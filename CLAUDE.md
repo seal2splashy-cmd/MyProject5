@@ -7,7 +7,8 @@
 - Legacy input (axis/action mappings in Config/DefaultInput.ini + direct BindKey calls)
 
 ## Classes
-- AMyFPSPawn - APawn with manual movement (walk 3 / sprint 6.5 m/s + momentum), stamina, breathing, fear
+- AMyFPSPawn - APawn with manual movement (walk 3 / sprint 6.5 m/s + momentum, slopes <= 45 deg, 40 cm step-up,
+  ground snap going down), stamina, breathing, fear
   (heartbeat, hand tremor, vignette - from hunting enemies, the Gaunt, darkness, wounds), fall damage,
   per-surface footsteps (noise for enemies), lean collision, GetVisibility01 (light + torch) for enemy eyes,
   bodycam camera FX, health/death, FP arms, weapon slots (Docs/REALISM.md)
@@ -70,6 +71,10 @@
   Tools/build_a07_expanded_ue58.py, Tools/setup_a07_playable_ue58.py (doors, pickups, tags, Gaunt, sounds, NavMesh),
   then Tools/dress_a07_ue58.py (Meshy props + invisible collision boxes, light fittings, generator/light hum tags,
   reverb Audio Volumes, asset inventory in Saved/AH_AssetInventory.txt).
+- A-07 kit: Assets/MeshyFacility/Kit (Tools/prepare_a07_kit_blender.py from the user's Meshy ZIPs: vessel, decon pod,
+  console, vault door, wall panel, mount ring, catwalk - real size, front +Y, pivot bottom-centre, kit_report.json has
+  the catwalk deck height) -> Tools/import_a07_kit_ue58.py -> /Game/ForestResearch/A07Kit ->
+  Tools/build_a07_kit_level_ue58.py (walkable catwalks + stairs, wall cladding, cells, consoles, vessel, decon pod).
 - Content/ is not in git: Claude only sees assets pushed under Assets/ (and Saved/AH_AssetInventory.txt if sent).
 
 ## Controls
