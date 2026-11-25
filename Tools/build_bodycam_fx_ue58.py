@@ -3,7 +3,13 @@ build_bodycam_fx_ue58.py - run INSIDE the Unreal Editor (Tools > Execute Python 
 
 Makes the two assets the bodycam look uses (C++ skips them silently if they're missing):
   1. /Game/Generated/PostProcess/M_BodycamLens  - post-process material: fisheye-style
-     barrel distortion, scalar parameter "Distortion" (driven by UBodycamLensComponent)
+     barrel distortion + the footage glitches, all driven by UBodycamLensComponent:
+       Distortion  barrel bulge
+       Skew        rolling shutter: rows are read top to bottom, so a fast pan shears the picture
+       Squash      rolling shutter on a fast tilt: the picture stretches / squashes vertically
+       Blocks      fraction of compression macroblocks that fetch from the wrong place (0..1)
+       Tear, TearY a band of rows slipping sideways, and where it is (0..1 down the screen)
+       Seed        changes which blocks break
   2. /Game/Generated/Audio/SW_Torch_Click       - torch switch click (Assets/Audio/SW_Torch_Click.wav)
 
 Safe to re-run: it replaces what it made before and touches nothing else (no maps, no
@@ -32,7 +38,15 @@ float aspect = Size.x / max(Size.y, 1.0);
 float2 a = c * float2(aspect, 1.0);
 float r2 = dot(a, a) / (0.25 * (aspect * aspect + 1.0));
 float k = max(K, 0.0);
-return saturate(c * (1.0 + k * r2) / (1.0 + k) + 0.5);
+float2 s = c * (1.0 + k * r2) / (1.0 + k) + 0.5;
+s.x += Skew * (UV.y - 0.5);
+s.y = (s.y - 0.5) * (1.0 + Squash) + 0.5;
+float2 blk = floor(UV * float2(32.0, 18.0));
+float h = frac(sin(dot(blk + floor(Seed * 7.0), float2(12.9898, 78.233))) * 43758.5453);
+if (h < Blocks) { s += (float2(frac(h * 91.7), frac(h * 37.3)) - 0.5) * 0.12; }
+float band = 1.0 - smoothstep(0.0, 0.015, abs(UV.y - TearY));
+s.x += band * Tear;
+return saturate(s);
 """
 
 
@@ -75,11 +89,20 @@ def build_lens_material():
     custom.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT2)
     custom.set_editor_property("code", BARREL_HLSL.strip())
     inputs = []
-    for name in ("UV", "Size", "K"):
+    for name in ("UV", "Size", "K", "Skew", "Squash", "Blocks", "Seed", "Tear", "TearY"):
         ci = unreal.CustomInput()
         ci.set_editor_property("input_name", name)
         inputs.append(ci)
     custom.set_editor_property("inputs", inputs)
+
+    # glitch parameters (all 0 = clean picture)
+    glitch = {}
+    for i, (name, default) in enumerate((("Skew", 0.0), ("Squash", 0.0), ("Blocks", 0.0), ("Seed", 0.0),
+                                         ("Tear", 0.0), ("TearY", 0.5))):
+        p = mel.create_material_expression(mat, unreal.MaterialExpressionScalarParameter, -900, 440 + i * 110)
+        p.set_editor_property("parameter_name", name)
+        p.set_editor_property("default_value", default)
+        glitch[name] = p
 
     scene = mel.create_material_expression(mat, unreal.MaterialExpressionSceneTexture, -250, 100)
     scene.set_editor_property("scene_texture_id", unreal.SceneTextureId.PPI_POST_PROCESS_INPUT0)
@@ -89,6 +112,8 @@ def build_lens_material():
     ok &= mel.connect_material_expressions(screen, "ViewportUV", custom, "UV")
     ok &= mel.connect_material_expressions(size, "", custom, "Size")
     ok &= mel.connect_material_expressions(k, "", custom, "K")
+    for name, p in glitch.items():
+        ok &= mel.connect_material_expressions(p, "", custom, name)
     ok &= mel.connect_material_expressions(custom, "", scene, "UVs")
     ok &= mel.connect_material_property(scene, "Color", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     if not ok:

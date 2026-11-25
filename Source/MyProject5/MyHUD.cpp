@@ -10,6 +10,7 @@
 #include "Misc/DateTime.h"
 #include "Camera/PlayerCameraManager.h"
 #include "FacilityMissionDirector.h"
+#include "AHPlayerController.h"
 
 void AMyHUD::DrawHUD()
 {
@@ -26,6 +27,16 @@ void AMyHUD::DrawHUD()
     if (bShowBodycamOverlay)
     {
         DrawBodycamOverlay();
+    }
+
+    // Title / pause / settings take over the screen (the game is paused behind them)
+    if (AAHPlayerController* MenuPC = Cast<AAHPlayerController>(GetOwningPlayerController()))
+    {
+        if (MenuPC->GetMenu() != EAHMenu::None)
+        {
+            DrawMenu(MenuPC);
+            return;
+        }
     }
 
     APlayerController* PC = GetOwningPlayerController();
@@ -216,9 +227,24 @@ void AMyHUD::DrawBodycamOverlay()
 {
     // What real body-worn cameras burn into the corner of their footage
     UFont* Font = GEngine ? GEngine->GetSmallFont() : nullptr;
+    const UBodycamLensComponent* Lens = nullptr;
+    if (const APlayerController* OwnerPC = GetOwningPlayerController())
+    {
+        if (const AMyFPSPawn* P = Cast<AMyFPSPawn>(OwnerPC->GetPawn()))
+        {
+            Lens = P->GetBodycamLens();
+        }
+    }
+    const bool bHeld = Lens && Lens->IsFrameHeld();
+    const float SignalLoss = Lens ? Lens->GetSignalLoss() : 0.f;
+
     const FDateTime Now = FDateTime::Now();
-    const FString Stamp = FString::Printf(TEXT("%04d-%02d-%02d  %02d:%02d:%02d"),
-        Now.GetYear(), Now.GetMonth(), Now.GetDay(), Now.GetHour(), Now.GetMinute(), Now.GetSecond());
+    if (!bHeld || LastStamp.IsEmpty())
+    {
+        LastStamp = FString::Printf(TEXT("%04d-%02d-%02d  %02d:%02d:%02d"),
+            Now.GetYear(), Now.GetMonth(), Now.GetDay(), Now.GetHour(), Now.GetMinute(), Now.GetSecond());
+    }
+    const FString Stamp = LastStamp;     // frozen while frames are being dropped
 
     const float Right = Canvas->SizeX - 24.f;
     float W = 0.f, H = 0.f;
@@ -230,16 +256,19 @@ void AMyHUD::DrawBodycamOverlay()
     DrawText(Stamp, Text, X, Y, Font, 1.2f);
     DrawText(CameraUnitId, Text, X, Y + H + 2.f, Font, 1.2f);
 
-    // REC with a blinking red dot
-    const bool bOn = FMath::Fmod(GetWorld()->GetTimeSeconds(), 1.0) < 0.6;
+    // REC with a blinking red dot - or, when the signal is breaking up, NO SIGNAL flickering in
+    const double Time = GetWorld()->GetRealTimeSeconds();
+    const bool bOn = FMath::Fmod(Time, 1.0) < 0.6;
+    const bool bNoSignal = SignalLoss > 0.55f && FMath::FRand() < SignalLoss * 0.8f;
+    const FString Rec = bNoSignal ? FString(TEXT("NO SIGNAL")) : FString(TEXT("REC"));
     float RW = 0.f, RH = 0.f;
-    GetTextSize(TEXT("REC"), RW, RH, Font, 1.2f);
+    GetTextSize(Rec, RW, RH, Font, 1.2f);
     const float RecX = X - RW - 26.f;
-    if (bOn)
+    if (bOn && !bHeld && !bNoSignal)
     {
         DrawRect(FLinearColor(0.9f, 0.05f, 0.05f, 0.9f), RecX - 14.f, Y + RH * 0.5f - 4.f, 8.f, 8.f);
     }
-    DrawText(TEXT("REC"), Text, RecX, Y, Font, 1.2f);
+    DrawText(Rec, bNoSignal ? FLinearColor(1.f, 0.2f, 0.15f, 0.95f) : Text, RecX, Y, Font, 1.2f);
 }
 
 void AMyHUD::DrawCrosshairAt(float X, float Y)
@@ -343,4 +372,83 @@ void AMyHUD::DrawDeathScreen(float TimeSinceDeath)
         DrawText(Msg, FLinearColor(0.85f, 0.1f, 0.1f, 1.f),
             (Canvas->SizeX - W) * 0.5f, (Canvas->SizeY - H) * 0.5f, Font, 2.f);
     }
+}
+
+void AMyHUD::DrawMenu(AAHPlayerController* MenuPC)
+{
+    UFont* Small = GEngine ? GEngine->GetSmallFont() : nullptr;
+    UFont* Medium = GEngine ? GEngine->GetMediumFont() : nullptr;
+    UFont* Large = GEngine ? GEngine->GetLargeFont() : nullptr;
+    const float W = Canvas->SizeX;
+    const float H = Canvas->SizeY;
+    const EAHMenu Which = MenuPC->GetMenu();
+
+    DrawRect(FLinearColor(0.f, 0.f, 0.f, Which == EAHMenu::Title ? 0.72f : 0.6f), 0.f, 0.f, W, H);
+    // scanlines, like paused footage on a review monitor
+    for (float LineY = 0.f; LineY < H; LineY += 4.f)
+    {
+        DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.18f), 0.f, LineY, W, 1.f);
+    }
+
+    const float Left = W * 0.12f;
+    float Y = H * 0.22f;
+    const FLinearColor Amber(1.f, 0.66f, 0.2f, 0.95f);
+    const FLinearColor Pale(0.92f, 0.92f, 0.88f, 0.9f);
+    const FLinearColor Dim(0.6f, 0.6f, 0.58f, 0.75f);
+
+    float TW = 0.f, TH = 0.f;
+    if (Which == EAHMenu::Title)
+    {
+        DrawText(TEXT("R.S.U. EVIDENCE ARCHIVE  //  BODY-WORN CAMERA FOOTAGE"), Dim, Left, Y - 60.f, Small, 1.2f);
+        DrawText(TEXT("SITE A-17"), Pale, Left, Y - 20.f, Large, 2.6f);
+        GetTextSize(TEXT("SITE A-17"), TW, TH, Large, 2.6f);
+        Y += TH - 10.f;
+        DrawText(TEXT("UNIT AH-BC 0417  |  2ND CONTAINMENT TEAM  |  STATUS: NO CONTACT"), Amber, Left, Y, Small, 1.2f);
+        Y += 70.f;
+    }
+    else
+    {
+        const TCHAR* Head = Which == EAHMenu::Pause ? TEXT("PLAYBACK PAUSED") : TEXT("SETTINGS");
+        DrawText(Head, Pale, Left, Y - 20.f, Large, 2.f);
+        GetTextSize(Head, TW, TH, Large, 2.f);
+        Y += TH + 30.f;
+        // the familiar pause bars
+        if (Which == EAHMenu::Pause)
+        {
+            DrawRect(Amber, Left - 50.f, H * 0.22f - 12.f, 9.f, 34.f);
+            DrawRect(Amber, Left - 36.f, H * 0.22f - 12.f, 9.f, 34.f);
+        }
+    }
+
+    TArray<FAHMenuLine> Lines;
+    MenuPC->GetMenuLines(Lines);
+    TArray<FBox2D> Rects;
+    const float RowW = FMath::Min(W * 0.5f, 720.f);
+    const float RowH = 44.f;
+    for (int32 i = 0; i < Lines.Num(); ++i)
+    {
+        const bool bSel = (i == MenuPC->GetSelected());
+        const float RowY = Y + i * (RowH + 6.f);
+        if (bSel)
+        {
+            DrawRect(FLinearColor(1.f, 0.66f, 0.2f, 0.16f), Left - 14.f, RowY - 6.f, RowW, RowH);
+            DrawRect(Amber, Left - 14.f, RowY - 6.f, 3.f, RowH);
+        }
+        DrawText(Lines[i].Label, bSel ? Pale : Dim, Left, RowY, Medium, 1.f);
+        if (!Lines[i].Value.IsEmpty())
+        {
+            const FString Val = FString::Printf(TEXT("<  %s  >"), *Lines[i].Value);
+            float VW = 0.f, VH = 0.f;
+            GetTextSize(Val, VW, VH, Medium, 1.f);
+            DrawText(Val, bSel ? Amber : Dim, Left - 14.f + RowW - VW - 18.f, RowY, Medium, 1.f);
+        }
+        Rects.Add(FBox2D(FVector2D(Left - 14.f, RowY - 6.f), FVector2D(Left - 14.f + RowW, RowY - 6.f + RowH)));
+    }
+    MenuPC->SetMenuRects(Rects);
+
+    const TCHAR* Hint = Which == EAHMenu::Settings
+        ? TEXT("UP / DOWN select    LEFT / RIGHT or click a side to change    ESC back")
+        : (Which == EAHMenu::Pause ? TEXT("UP / DOWN select    ENTER or click    ESC (P in the editor) resume")
+                                   : TEXT("UP / DOWN select    ENTER or click"));
+    DrawText(Hint, Dim, Left, H - 70.f, Small, 1.1f);
 }

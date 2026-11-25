@@ -2,7 +2,7 @@
 ## Unreal Engine 5.8 | C++
 
 ## Project Overview
-- Bodycam-style FPS horror/action game (OCR A Level CS coursework + ongoing project)
+- Bodycam-style FPS horror/action game - a personal project (it started out as OCR A Level CS coursework)
 - All gameplay logic is in C++, no Blueprints for core mechanics
 - Legacy input (axis/action mappings in Config/DefaultInput.ini + direct BindKey calls)
 
@@ -12,7 +12,13 @@
   (heartbeat, hand tremor, vignette - from hunting enemies, the Gaunt, darkness, wounds), fall damage,
   per-surface footsteps (noise for enemies), lean collision, GetVisibility01 (light + torch) for enemy eyes,
   bodycam camera FX, health/death, FP arms, weapon slots (Docs/REALISM.md)
-- AMyGameMode - sets AMyFPSPawn + AMyHUD
+- AMyGameMode - sets AMyFPSPawn + AMyHUD + AAHPlayerController
+- AAHPlayerController - title (once per session) / pause (Esc, P in PIE) / settings menus drawn by AMyHUD, polled input
+  that works while paused, applies UAHSettingsSave (sensitivity, invert Y, FOV, volume, brightness, bodycam effects,
+  motion blur) to the pawn / lens / audio device (Docs/MENUS_PACKAGING.md). `ah.SkipTitle 1`
+- UAHSettingsSave - USaveGame slot AHSettings
+- UAHAmbienceComponent - on the pawn: fear-driven drone, distant positional building sounds, stingers on first sight of
+  AH_Stinger-tagged things (Docs/HORROR_SYSTEMS.md)
 - AGun - pistol: real mags + chamber, tactical/empty reloads, spread cone, stacking upward recoil, ADS pose,
   muzzle flash light, gunshot noise; first-person offset, GetMuzzleAimPoint (crosshair + bullets share it).
   Mesh, first one imported wins: SM_AH_Pistol (Meshy), SM_AH_ServicePistol (Tools/build_pistol_blender.py),
@@ -25,7 +31,8 @@
   Console: ah.DebugSenses 1, ah.DebugNoise 1
 - ASmartEnemy - AEnemy + Q-learning (FQLearningAgent + FPlayerTracker), Saved/QLearning/qtable.json
 - AGauntAnomaly - ASmartEnemy with the Gaunt's body: rigged SK_AH_Gaunt + clips if imported, else the static
-  stand-in with procedural motion; reports bodycam interference when near (Docs/GAUNT_ANOMALY.md)
+  stand-in with procedural motion; reports bodycam interference when near (Docs/GAUNT_ANOMALY.md); stalks (frozen
+  while watched beyond 11 m), flinches from the torch, grab-then-kill, breathing/clicks/growl (Docs/HORROR_SYSTEMS.md)
 - AMyHUD - bodycam REC/timestamp overlay, spread-aware crosshair (fades on ADS), health/stamina bars, ammo + mags,
   death screen, mission objective (top left) + messages + extraction screen when a mission director is in the level
 - AAHInteractable (AHInteractable.h) - base for F-to-use things; the pawn traces from the camera, HUD shows "[F] ..."
@@ -50,7 +57,9 @@
   Uses SK_AH_OperatorArms_Meshy (Meshy gloved forearms on the same rig) when imported, else
   SK_AH_ContainmentOperator_FP (bPreferMeshyArms; Docs/OPERATOR_ARMS_MESHY.md)
 - UBodycamLensComponent - camera post-process bodycam look (barrel distortion via M_BodycamLens, fringing,
-  grain, vignette, flat colour, slow exposure) + SetInterference / ReportInterference (driven by AGauntAnomaly)
+  grain, vignette, flat colour, slow exposure) + SetInterference / ReportInterference (driven by AGauntAnomaly),
+  rolling shutter, glitch bursts (macroblocks, tear, crackle), dropped frames (camera hold), ForceGlitch
+- AMyFPSPawn also: Grab(By, Seconds) (view dragged to the grabber), hit knockback + glitch, settings setters
 - UBodycamTorchComponent - chest spot light on the camera: lagged aim, shimmer, battery with low-battery stutter
   (Docs/BODYCAM_FX.md)
 
@@ -81,16 +90,18 @@
 - Story: Tools/pose_dead_operators_blender.py (rigged Meshy Tactical Operator -> 3 baked death poses in
   Assets/DeadOperators) + Tools/generate_blood_decals.py (Assets/Textures/Blood) -> Tools/place_story_ue58.py
   (bodies + M_AH_BloodDecal decals; the access card objective moves onto the storage body).
+- Tools/import_audio_ue58.py imports only new Assets/Audio WAVs (+ loops); Tools/setup_packaging.py edits local
+  Config inis for a packaged build (cook /Game/Generated etc. - soft-loaded assets aren't referenced).
 - Content/ is not in git: Claude only sees assets pushed under Assets/ (and Saved/AH_AssetInventory.txt if sent).
 
 ## Controls
 WASD move, Shift sprint, Ctrl crouch (slide while sprinting), Space jump, Q/E head tilt, Z/C lean,
 1 gun, 2 melee (press 2 again to cycle pipe/crowbar/machete/axe). Gun: LMB fire, RMB aim, R reload. Melee: hold RMB + move mouse to steer, LMB thrust.
-F use (doors, pickups, mission devices; G also works on mission devices), T torch.
+F use (doors, pickups, mission devices; G also works on mission devices), T torch. Esc pause (P in PIE).
 
 ## Still to do
 - One/two-hand grip modes for melee
-- Rolling-shutter lens effect; reverb volumes exist only in the A-07 map so far (Tools/dress_a07_ue58.py)
+- Reverb volumes exist only in the A-07 map so far (Tools/dress_a07_ue58.py)
 
 ## History
 Source was lost in Oct 2026 and rebuilt from chat history. MyFPSPawn/AGun/MyHUD/MyGameMode are

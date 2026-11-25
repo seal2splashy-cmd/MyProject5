@@ -26,6 +26,10 @@ public:
     /** True (and fills the outs) if there's a checkpoint for this level. */
     bool GetCheckpoint(const FString& InLevelName, int32& OutStage, FVector& OutLocation, float& OutYaw, float& OutElapsed) const;
 
+    /** The title screen shows once per session (AAHPlayerController); QUIT TO TITLE clears this. */
+    bool IsTitleShown() const { return bTitleShown; }
+    void SetTitleShown(bool bShown) { bTitleShown = bShown; }
+
     /** How many times you've been sent back to a checkpoint this run. */
     int32 GetDeaths() const { return Deaths; }
     void AddDeath() { ++Deaths; }
@@ -38,4 +42,5 @@ private:
     float Elapsed = 0.f;
     bool bValid = false;
     int32 Deaths = 0;
+    bool bTitleShown = false;
 };

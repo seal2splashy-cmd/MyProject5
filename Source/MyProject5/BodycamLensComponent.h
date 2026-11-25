@@ -19,9 +19,16 @@ class UMaterialInstanceDynamic;
  * Everything is set on the camera's own post-process settings, so it works in every map.
  * These override the same settings in any Post Process Volume (e.g. the one in TestArena).
  *
- * SetInterference(0..1) makes the picture break up: more fringing and grain, colour
- * draining out, random glitch bursts where the lens warps. Nothing calls it yet; it's
- * there for anomalies/fear to drive later.
+ * SetInterference(0..1) / ReportInterference make the picture break up (the Gaunt drives it):
+ * more fringing and grain, colour draining out, and glitch bursts - the lens warps, compression
+ * macroblocks fetch from the wrong place, a band of rows tears sideways, the audio crackles, and
+ * sometimes the recorder drops frames (the picture freezes for a moment, then jumps).
+ *
+ * Rolling shutter: cheap sensors read rows top to bottom, so fast pans shear the picture and
+ * fast tilts squash it. Always on, scaled by RollingShutter.
+ *
+ * The glitch parameters need the lens material rebuilt by Tools/build_bodycam_fx_ue58.py (Nov 2026
+ * version); with an older material they're simply ignored.
  */
 UCLASS(ClassGroup = (Camera), meta = (BlueprintSpawnableComponent))
 class MYPROJECT5_API UBodycamLensComponent : public UActorComponent
@@ -55,6 +62,22 @@ public:
 
     /** 0..1 fear from the pawn: the picture narrows (vignette), drains a little and gets grainier. */
     void SetStress(float Stress01) { Stress = FMath::Clamp(Stress01, 0.f, 1.f); }
+
+    /** A glitch burst right now (a hit, a grab, a scream). Strong ones can drop frames. */
+    void ForceGlitch(float Strength01, bool bAllowFrameDrop = true);
+
+    /** The recorder is dropping frames: the picture is frozen (the HUD freezes its timestamp too). */
+    bool IsFrameHeld() const { return HoldTimeLeft > 0.f; }
+
+    /** 0..1 how badly the signal is breaking up right now (the HUD shows NO SIGNAL near 1). */
+    float GetSignalLoss() const { return FMath::Clamp(FMath::Max(Glitch * 0.9f, Interference * 0.75f) + (IsFrameHeld() ? 0.3f : 0.f), 0.f, 1.f); }
+
+    // ---- Settings (AAHPlayerController applies the saved ones)
+    /** 0 = no glitches / rolling shutter / fringing boost, 1 = full bodycam. */
+    void SetEffectsScale(float Scale01) { EffectsScale = FMath::Clamp(Scale01, 0.f, 1.f); }
+    void SetMotionBlurEnabled(bool bOn) { bMotionBlurOn = bOn; }
+    /** Exposure compensation in stops (EV), from the brightness setting. */
+    void SetBrightness(float EV) { BrightnessEV = FMath::Clamp(EV, -3.f, 3.f); }
 
     /**
      * Where a point from ProjectWorldLocationToScreen actually shows up once the lens has
@@ -138,8 +161,27 @@ public:
     UPROPERTY(EditAnywhere, Category = "Bodycam|Interference", meta = (ClampMin = "0"))
     float GlitchRate = 3.f;
 
+    /** Chance a glitch burst also drops frames (scaled by how strong it is). */
+    UPROPERTY(EditAnywhere, Category = "Bodycam|Interference", meta = (ClampMin = "0", ClampMax = "1"))
+    float FrameDropChance = 0.35f;
+
+    /** How long a dropped-frame freeze lasts (seconds, random in this range). */
+    UPROPERTY(EditAnywhere, Category = "Bodycam|Interference")
+    FVector2D FrameDropDuration = FVector2D(0.08f, 0.26f);
+
+    /** Shear across the picture at a FastTurnSpeed pan (fraction of the screen width). 0 = off. */
+    UPROPERTY(EditAnywhere, Category = "Bodycam|Rolling Shutter", meta = (ClampMin = "0", ClampMax = "0.3"))
+    float RollingShutter = 0.07f;
+
+    /** Vertical squash/stretch at a FastTurnSpeed tilt. */
+    UPROPERTY(EditAnywhere, Category = "Bodycam|Rolling Shutter", meta = (ClampMin = "0", ClampMax = "0.3"))
+    float RollingShutterSquash = 0.05f;
+
 private:
     void ApplySettings();
+    void StartGlitch(float Strength, bool bAllowFrameDrop);
+    void UpdateRollingShutter(float DeltaTime);
+    void UpdateFrameHold(float DeltaTime);
 
     UPROPERTY(Transient)
     TObjectPtr<UCameraComponent> Camera;
@@ -156,4 +198,25 @@ private:
     float TurnBlur = 0.f;            // 0..1, smoothed
     float Flash = 0.f;               // 1 at a gunshot, decays in ~0.15 s
     float Stress = 0.f;              // fear, set by the pawn
+
+    // rolling shutter (signed, smoothed turn rates in deg/s)
+    FRotator LastCameraRot = FRotator::ZeroRotator;
+    bool bHaveLastRot = false;
+    float YawRate = 0.f;
+    float PitchRate = 0.f;
+
+    // glitch details
+    float Blocks = 0.f;
+    float Tear = 0.f;
+    float TearY = 0.5f;
+    float Seed = 0.f;
+
+    // dropped frames: the camera is held where it was
+    float HoldTimeLeft = 0.f;
+    FTransform HeldTransform;
+
+    // settings
+    float EffectsScale = 1.f;
+    bool bMotionBlurOn = true;
+    float BrightnessEV = 0.f;
 };

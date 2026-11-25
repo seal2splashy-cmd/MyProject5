@@ -2,6 +2,9 @@
 #include "Camera/CameraComponent.h"
 #include "Materials/MaterialInterface.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "RealismUtils.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 
 UBodycamLensComponent::UBodycamLensComponent()
 {
@@ -65,6 +68,73 @@ void UBodycamLensComponent::OnGunshot()
     GlitchPhase = FMath::FRandRange(0.f, 2.f * UE_PI);
 }
 
+void UBodycamLensComponent::ForceGlitch(float Strength01, bool bAllowFrameDrop)
+{
+    StartGlitch(FMath::Clamp(Strength01, 0.f, 1.f), bAllowFrameDrop);
+}
+
+void UBodycamLensComponent::StartGlitch(float Strength, bool bAllowFrameDrop)
+{
+    if (EffectsScale <= 0.01f || Strength <= 0.f)
+    {
+        return;
+    }
+    Glitch = FMath::Max(Glitch, Strength);
+    GlitchPhase = FMath::FRandRange(0.f, 2.f * UE_PI);
+    Seed = FMath::FRandRange(0.f, 1000.f);
+    Blocks = FMath::Max(Blocks, Strength * FMath::FRandRange(0.04f, 0.22f));
+    if (FMath::FRand() < 0.6f)
+    {
+        Tear = FMath::FRandRange(-0.05f, 0.05f) * Strength;
+        TearY = FMath::FRand();
+    }
+
+    // the recorder chokes: drop a few frames
+    if (bAllowFrameDrop && Camera && HoldTimeLeft <= 0.f && FMath::FRand() < FrameDropChance * Strength * EffectsScale)
+    {
+        HoldTimeLeft = FMath::FRandRange(FrameDropDuration.X, FrameDropDuration.Y);
+        HeldTransform = Camera->GetComponentTransform();
+        if (USoundBase* Drop = AHRealism::GeneratedSound(TEXT("SW_Bodycam_Dropout_01")))
+        {
+            UGameplayStatics::PlaySound2D(this, Drop, 0.6f * Strength);
+        }
+    }
+    // the audio track crackles with it
+    if (Strength > 0.35f)
+    {
+        if (USoundBase* Crackle = AHRealism::RandomVariant(TEXT("SW_Bodycam_Crackle"), 3))
+        {
+            UGameplayStatics::PlaySound2D(this, Crackle, 0.25f + 0.5f * Strength, FMath::FRandRange(0.9f, 1.1f));
+        }
+    }
+}
+
+void UBodycamLensComponent::UpdateRollingShutter(float DeltaTime)
+{
+    // Signed turn rates from the camera itself (the pawn has already placed it this frame)
+    const FRotator Rot = Camera->GetComponentRotation();
+    if (bHaveLastRot && DeltaTime > 0.f)
+    {
+        const float Yaw = static_cast<float>(FRotator::NormalizeAxis(Rot.Yaw - LastCameraRot.Yaw)) / DeltaTime;
+        const float Pitch = static_cast<float>(FRotator::NormalizeAxis(Rot.Pitch - LastCameraRot.Pitch)) / DeltaTime;
+        YawRate = FMath::FInterpTo(YawRate, Yaw, DeltaTime, 18.f);
+        PitchRate = FMath::FInterpTo(PitchRate, Pitch, DeltaTime, 18.f);
+    }
+    LastCameraRot = Rot;
+    bHaveLastRot = true;
+}
+
+void UBodycamLensComponent::UpdateFrameHold(float DeltaTime)
+{
+    if (HoldTimeLeft <= 0.f)
+    {
+        return;
+    }
+    HoldTimeLeft -= DeltaTime;
+    // Keep showing the old frame: the camera stays where it was (the pawn puts it back next tick)
+    Camera->SetWorldTransform(HeldTransform);
+}
+
 void UBodycamLensComponent::TickComponent(float DeltaTime, ELevelTick TickType,
     FActorComponentTickFunction* ThisTickFunction)
 {
@@ -79,13 +149,17 @@ void UBodycamLensComponent::TickComponent(float DeltaTime, ELevelTick TickType,
     ReportedThisFrame = 0.f;
     Interference = FMath::FInterpTo(Interference, Target, DeltaTime, InterferenceResponse);
 
+    UpdateRollingShutter(DeltaTime);
+
     // Random glitch bursts, more often the stronger the interference.
-    if (Interference > 0.01f && FMath::FRand() < Interference * GlitchRate * DeltaTime)
+    if (Interference > 0.01f && FMath::FRand() < Interference * GlitchRate * DeltaTime * EffectsScale)
     {
-        Glitch = FMath::FRandRange(0.6f, 1.f);
-        GlitchPhase = FMath::FRandRange(0.f, 2.f * UE_PI);
+        StartGlitch(FMath::FRandRange(0.6f, 1.f) * FMath::Max(Interference, 0.4f), Interference > 0.35f);
     }
     Glitch = FMath::FInterpTo(Glitch, 0.f, DeltaTime, 9.f);
+    Blocks = FMath::FInterpTo(Blocks, 0.f, DeltaTime, 12.f);
+    Tear = FMath::FInterpTo(Tear, 0.f, DeltaTime, 10.f);
+    UpdateFrameHold(DeltaTime);
     GlitchPhase += DeltaTime * 45.f;
     Flash = FMath::FInterpTo(Flash, 0.f, DeltaTime, 18.f);
 
@@ -110,6 +184,7 @@ void UBodycamLensComponent::ApplySettings()
     S.bOverride_AutoExposureSpeedUp = bOn;
     S.bOverride_AutoExposureSpeedDown = bOn;
     S.bOverride_ColorGain = bOn;
+    S.bOverride_AutoExposureBias = bOn;
 
     if (!bOn)
     {
@@ -121,8 +196,8 @@ void UBodycamLensComponent::ApplySettings()
         return;
     }
 
-    const float I = Interference;
-    const float G = Glitch;
+    const float I = Interference * EffectsScale;
+    const float G = Glitch * EffectsScale;
 
     S.SceneFringeIntensity = ChromaticAberration * (1.f + 2.f * I) + 4.f * G;
     S.ChromaticAberrationStartOffset = FMath::Lerp(ChromaticAberrationStart, 0.f, FMath::Max(I, G));
@@ -134,7 +209,8 @@ void UBodycamLensComponent::ApplySettings()
     S.ColorContrast = FVector4(Contrast, Contrast, Contrast, 1.f);
     S.SceneColorTint = Tint;
     S.BloomIntensity = Bloom * (1.f + 2.f * Flash);
-    S.MotionBlurAmount = FMath::Clamp(MotionBlur + TurnMotionBlur * TurnBlur, 0.f, 1.f);
+    S.MotionBlurAmount = bMotionBlurOn ? FMath::Clamp(MotionBlur + TurnMotionBlur * TurnBlur, 0.f, 1.f) : 0.f;
+    S.AutoExposureBias = BrightnessEV;
     // gunshot: the cheap sensor whites out for a couple of frames
     const float Gain = 1.f + GunshotFlash * Flash;
     S.ColorGain = FVector4(Gain, Gain * 0.97f, Gain * 0.9f, 1.f);
@@ -146,6 +222,17 @@ void UBodycamLensComponent::ApplySettings()
         // During a glitch the lens "breathes": distortion wobbles quickly about its normal value.
         CurrentDistortion = FMath::Max(BarrelDistortion + 0.12f * G * FMath::Sin(GlitchPhase) + 0.04f * I, 0.f);
         LensMID->SetScalarParameterValue(TEXT("Distortion"), CurrentDistortion);
+
+        // Rolling shutter: pan right -> the bottom rows were read later, further right
+        const float Fast = FMath::Max(FastTurnSpeed, 1.f);
+        LensMID->SetScalarParameterValue(TEXT("Skew"),
+            FMath::Clamp(YawRate / Fast, -1.5f, 1.5f) * RollingShutter * EffectsScale);
+        LensMID->SetScalarParameterValue(TEXT("Squash"),
+            FMath::Clamp(-PitchRate / Fast, -1.5f, 1.5f) * RollingShutterSquash * EffectsScale);
+        LensMID->SetScalarParameterValue(TEXT("Blocks"), Blocks * EffectsScale);
+        LensMID->SetScalarParameterValue(TEXT("Seed"), Seed);
+        LensMID->SetScalarParameterValue(TEXT("Tear"), Tear * EffectsScale);
+        LensMID->SetScalarParameterValue(TEXT("TearY"), TearY);
     }
     else
     {

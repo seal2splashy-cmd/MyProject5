@@ -9,6 +9,16 @@
 //    lean, stride bob and sway, nervous twitches, a lunge when it attacks, a topple when it dies.
 //
 // While it's alive and near the player it breaks up the bodycam picture.
+//
+// How it hunts (on top of the Q-learning chase):
+//  - Stalking: further than StalkDistance it only moves while you aren't looking at it. Look at it and
+//    it freezes, clicking at you; look away and it closes in faster than it walks.
+//  - Light: the torch beam on its head up close makes it shriek and back off into the dark for a
+//    couple of seconds (then it won't flinch again for a while - you can't just pin it with the torch).
+//  - Grab: a hit that would kill you is a grab instead - your view is wrenched round to its face, the
+//    bodycam breaks up, it screams, and then it finishes you.
+//  - Voice: wet breathing you can hear through walls (louder when it's hunting), clicks, a growl when it
+//    spots you. Footsteps and NavMesh paths (catwalks and stairs included) come from AEnemy.
 
 #pragma once
 
@@ -20,6 +30,7 @@ class UStaticMeshComponent;
 class UStaticMesh;
 class USkeletalMesh;
 class UAnimationAsset;
+class UAudioComponent;
 
 UCLASS()
 class MYPROJECT5_API AGauntAnomaly : public ASmartEnemy
@@ -38,6 +49,46 @@ protected:
     virtual void BeginPlay() override;
     virtual void PerformAttack() override;
     virtual void OnDeath() override;
+    virtual void HandleState_Chase(float DeltaTime) override;
+
+    // ---- Hunting
+
+    /** Beyond this it stalks: frozen while you look at it, closing in while you don't (cm). */
+    UPROPERTY(EditAnywhere, Category = "Gaunt|Hunting")
+    float StalkDistance = 1100.f;
+
+    /** How directly you have to look at it to freeze it (cosine; 0.88 = within ~28 degrees). */
+    UPROPERTY(EditAnywhere, Category = "Gaunt|Hunting", meta = (ClampMin = 0, ClampMax = 1))
+    float LookedAtCosine = 0.88f;
+
+    /** Speed x this while it creeps up on you unseen. */
+    UPROPERTY(EditAnywhere, Category = "Gaunt|Hunting")
+    float StalkSpeedScale = 1.35f;
+
+    /** The torch beam on its head within this range makes it flinch and back off (cm). */
+    UPROPERTY(EditAnywhere, Category = "Gaunt|Hunting")
+    float TorchFlinchDistance = 1400.f;
+
+    UPROPERTY(EditAnywhere, Category = "Gaunt|Hunting")
+    float FlinchDuration = 2.f;
+
+    /** After a flinch the light doesn't stop it again for this long. */
+    UPROPERTY(EditAnywhere, Category = "Gaunt|Hunting")
+    float FlinchCooldown = 6.f;
+
+    /** A killing blow is a grab first: this long with your view held on its face. 0 = just hit. */
+    UPROPERTY(EditAnywhere, Category = "Gaunt|Hunting", meta = (ClampMin = 0))
+    float GrabDuration = 1.8f;
+
+    // ---- Voice
+
+    /** How far its breathing carries (cm). */
+    UPROPERTY(EditAnywhere, Category = "Gaunt|Voice")
+    float BreathRange = 1300.f;
+
+    /** Seconds between clicks (random in this range); quicker while it's watching you. */
+    UPROPERTY(EditAnywhere, Category = "Gaunt|Voice")
+    FVector2D ClickInterval = FVector2D(1.5f, 4.5f);
 
     // ---- Assets (made by Tools/import_gaunt_ue58.py)
 
@@ -112,6 +163,20 @@ private:
     void UpdateRiggedAnimation();
     void UpdateStandIn(float DeltaTime);
     void UpdateInterference();
+    void UpdateVoice(float DeltaTime);
+    void UpdateGrab();
+    void Vocalise(const TCHAR* Prefix, int32 Variants, float Volume, float Range);
+
+    UPROPERTY(Transient)
+    TObjectPtr<UAudioComponent> BreathAudio;
+
+    bool bGrabbing = false;
+    float GrabEndTime = 0.f;
+    float FlinchUntil = -1.f;
+    float FlinchCooldownUntil = 0.f;
+    bool bStalkFrozen = false;
+    float NextClickTime = 0.f;
+    EAIState PrevAIState = EAIState::Patrol;
 
     bool bRigged = false;
 

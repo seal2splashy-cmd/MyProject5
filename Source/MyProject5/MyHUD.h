@@ -5,6 +5,7 @@
 #include "MyHUD.generated.h"
 
 class AFacilityMissionDirector;
+class AAHPlayerController;
 
 /**
  * Minimal bodycam HUD:
@@ -66,7 +67,9 @@ private:
     void DrawDeathScreen(float TimeSinceDeath);
     void DrawBodycamOverlay();
     void DrawMission();
+    void DrawMenu(AAHPlayerController* PC);
 
     TWeakObjectPtr<AFacilityMissionDirector> MissionDirector;
+    FString LastStamp;          // the timestamp freezes while the recorder drops frames
     float NextDirectorSearch = 0.f;
 };

@@ -491,6 +491,7 @@ def build_audio():
     save_wav("SW_Ambience_BodycamHiss_Loop", bodycam_hiss_loop(), peak=0.35)
     build_realism_audio()
     build_facility_audio()
+    build_horror_audio()
 
 
 def build_realism_audio():
@@ -671,6 +672,211 @@ def build_facility_audio():
     save_wav("SW_Light_Pop_01", light_pop(), peak=0.75)
     save_wav("SW_LightHum_Loop", light_hum_loop(), peak=0.5)
     save_wav("SW_Machine_Loop", machine_loop(), peak=0.8)
+
+
+
+# ============================================================ the Gaunt, the building, the recorder
+
+def _loop_noise(seconds, lo, hi):
+    """Band-limited noise that loops seamlessly (filtered in the frequency domain = circular)."""
+    n = int(SR * seconds)
+    spec = np.fft.rfft(rng.standard_normal(n))
+    f = np.fft.rfftfreq(n, 1 / SR)
+    spec *= ((f >= lo) & (f <= hi)).astype(float)
+    x = np.fft.irfft(spec, n)
+    return x / (np.max(np.abs(x)) + 1e-9)
+
+
+def gaunt_breath_loop(seconds=6.0):
+    """Wet, rattling breathing from a big chest: rasping inhale, long growling exhale. Loops."""
+    t = t_axis(seconds)
+    phase = (t / seconds * 2.0) % 1.0                      # two breaths per loop
+    inhale = np.sin(np.pi * np.clip(phase / 0.38, 0, 1)) ** 1.5 * (phase < 0.38)
+    ex_p = np.clip((phase - 0.45) / 0.5, 0, 1)
+    exhale = np.sin(np.pi * ex_p) ** 1.2 * ((phase >= 0.45) & (phase < 0.95))
+    rattle = 0.55 + 0.45 * np.sign(np.sin(2 * np.pi * 34 * t))          # mucus rattle
+    air_in = _loop_noise(seconds, 350, 1800) * inhale * rattle * 0.7
+    growl = (np.sin(2 * np.pi * 62 * t) + 0.5 * np.sin(2 * np.pi * 124 * t + 1)) * (0.6 + 0.4 * np.sin(2 * np.pi * 11 * t) ** 2)
+    air_out = (_loop_noise(seconds, 120, 900) * 0.8 + growl * 0.35) * exhale
+    return air_in + air_out
+
+
+def gaunt_click(variant):
+    """A train of sharp vocal clicks, like something echolocating in the dark."""
+    count = [9, 13, 6][variant]
+    seconds = 1.0
+    t = t_axis(seconds)
+    x = np.zeros_like(t)
+    pos = 0.05
+    for k in range(count):
+        click = band(rng.standard_normal(len(t)), 1800, 5500) * env_ad(len(t), 0.0003, 0.004)
+        click += _modes(t, 900 + 80 * variant, [1.0, 1.9], [0.012, 0.008]) * 0.4    # throat resonance
+        x += np.roll(click, int(SR * pos)) * (0.6 + 0.4 * rng.random())
+        pos += 0.07 - 0.035 * np.sin(np.pi * k / count) + rng.uniform(-0.005, 0.005)
+    return room_tail(x, seconds=0.4, tau=0.15, mix=0.2)
+
+
+def gaunt_growl():
+    """It's seen you: a low, rough growl that swells and drops."""
+    seconds = 1.8
+    t = t_axis(seconds)
+    f = 58 + 22 * np.sin(np.pi * np.clip(t / 1.5, 0, 1))
+    ph = 2 * np.pi * np.cumsum(f) / SR
+    saw = sum(np.sin(h * ph) / h for h in range(1, 12))
+    rough = 0.6 + 0.4 * np.sign(np.sin(2 * np.pi * 27 * t))
+    x = (saw * rough + band(rng.standard_normal(len(t)), 200, 900) * 0.4)
+    x = band(x, 50, 1400) * np.sin(np.pi * np.clip(t / seconds, 0, 1)) ** 0.7
+    return room_tail(x, seconds=0.8, tau=0.3, mix=0.3)
+
+
+def gaunt_screech():
+    """The light hurts it: a pained, falling shriek."""
+    seconds = 1.3
+    t = t_axis(seconds)
+    f = 2600 - 1300 * (t / seconds) ** 0.7 + 120 * np.sin(2 * np.pi * 9 * t)
+    ph = 2 * np.pi * np.cumsum(f) / SR
+    x = np.tanh(2.5 * (np.sin(ph) + 0.6 * np.sin(1.51 * ph) + 0.3 * np.sin(2.02 * ph)))
+    x += band(rng.standard_normal(len(t)), 1500, 6000) * 0.35
+    x *= env_ad(len(t), 0.02, 0.5)
+    return room_tail(x, seconds=0.9, tau=0.3, mix=0.35)
+
+
+def gaunt_scream():
+    """Right in your face: a roaring scream, low roar under a tearing shriek."""
+    seconds = 2.0
+    t = t_axis(seconds)
+    f_lo = 85 + 30 * np.sin(np.pi * t / seconds)
+    roar = np.tanh(3 * sum(np.sin(h * 2 * np.pi * np.cumsum(f_lo) / SR) / h for h in range(1, 10)))
+    f_hi = 1700 + 500 * np.sin(np.pi * t / seconds) + 90 * np.sin(2 * np.pi * 13 * t)
+    shriek = np.tanh(2 * np.sin(2 * np.pi * np.cumsum(f_hi) / SR) + np.sin(2 * np.pi * np.cumsum(f_hi * 1.48) / SR))
+    breath = band(rng.standard_normal(len(t)), 300, 5000)
+    x = (roar * 0.8 + shriek * 0.6 + breath * 0.4) * np.clip(t / 0.06, 0, 1) * np.clip((seconds - t) / 0.6, 0, 1)
+    return room_tail(x, seconds=1.0, tau=0.35, mix=0.35)
+
+
+def metal_groan(variant):
+    """Steel under load: a slow bowed-metal moan with stick-slip creaks."""
+    seconds = [3.2, 4.0, 2.6][variant]
+    t = t_axis(seconds)
+    base = [72, 95, 58][variant]
+    glide = base * (1 - 0.18 * (t / seconds)) * (1 + 0.02 * np.sin(2 * np.pi * 0.7 * t))
+    ph = 2 * np.pi * np.cumsum(glide) / SR
+    partials = [1.0, 2.76, 5.4, 8.93]                  # inharmonic, like a beam or a tank
+    x = sum(np.sin(p * ph + i) / (1 + i) for i, p in enumerate(partials))
+    stick = 0.5 + 0.5 * np.sign(np.sin(2 * np.pi * (9 + 6 * variant) * t + 3 * np.sin(2 * np.pi * 0.5 * t)))
+    x *= 0.6 + 0.4 * stick
+    x *= np.sin(np.pi * np.clip(t / seconds, 0, 1)) ** 0.8
+    x = band(x, 40, 2500)
+    return room_tail(x, seconds=2.0, tau=0.7, mix=0.5)
+
+
+def pipe_knock(variant):
+    """Water hammer: a few knocks travelling down a pipe run."""
+    seconds = 2.2
+    t = t_axis(seconds)
+    x = np.zeros_like(t)
+    starts = np.cumsum(rng.uniform(0.12, 0.45, 2 + variant)) - 0.1
+    for k, st in enumerate(starts):
+        thump = lowpass(rng.standard_normal(len(t)), 180) * env_ad(len(t), 0.001, 0.05) * 2
+        ring = _modes(t, 420 + 60 * variant, [1.0, 2.3, 3.7], [0.15, 0.1, 0.06], [1, .5, .3])
+        x += np.roll(thump + ring * 0.6, int(SR * max(st, 0))) * (1 - 0.15 * k)
+    return room_tail(x, seconds=1.2, tau=0.4, mix=0.4)
+
+
+def settling_creak(variant):
+    """The building settling: a creak that speeds up and stops."""
+    seconds = [0.9, 1.3][variant]
+    t = t_axis(seconds)
+    rate = 18 + 40 * (t / seconds) ** (1.5 + variant)
+    pulses = (np.sin(2 * np.pi * np.cumsum(rate) / SR) > 0.97).astype(float)
+    x = band(pulses + 0.05 * rng.standard_normal(len(t)), 350, 2200)
+    x *= np.sin(np.pi * np.clip(t / seconds, 0, 1))
+    return room_tail(x, seconds=0.8, tau=0.3, mix=0.4)
+
+
+def distant_thud(variant):
+    """Something heavy hitting the floor somewhere else in the building."""
+    seconds = 2.2
+    t = t_axis(seconds)
+    boom = lowpass(rng.standard_normal(len(t)), 90) * env_ad(len(t), 0.004, 0.25) * 3
+    boom += np.sin(2 * np.pi * (48 + 10 * variant) * t) * env_ad(len(t), 0.003, 0.35)
+    rattle = band(rng.standard_normal(len(t)), 300, 1500) * env_ad(len(t), 0.01, 0.12) * 0.2
+    return room_tail(lowpass(boom + rattle, 600), seconds=1.4, tau=0.5, mix=0.5)
+
+
+def debris_trickle(variant):
+    """Grit and flakes of concrete trickling down from the ceiling."""
+    seconds = 2.4
+    t = t_axis(seconds)
+    density = 0.004 * np.exp(-t / (0.6 + 0.3 * variant))
+    grains = (rng.random(len(t)) < density).astype(float) * rng.uniform(0.3, 1.0, len(t))
+    x = band(grains, 1500, 7000) + band(rng.standard_normal(len(t)), 2000, 6000) * 0.04 * np.exp(-t / 0.8)
+    return room_tail(x, seconds=0.6, tau=0.2, mix=0.3)
+
+
+def drone_loop(seconds=12.0):
+    """The building itself: a low, uneasy bed of detuned tones and moving air. Loops."""
+    t = t_axis(seconds)
+    x = np.sin(2 * np.pi * 43.0 * t) + 0.8 * np.sin(2 * np.pi * 45.5 * t + 1.0)       # slow beating
+    x += 0.25 * np.sin(2 * np.pi * 86.0 * t + 0.4) + 0.12 * np.sin(2 * np.pi * 129.25 * t)
+    air = _loop_noise(seconds, 60, 320)
+    swell = 0.7 + 0.3 * np.sin(2 * np.pi * t / seconds * 2) * np.sin(2 * np.pi * t / seconds)
+    return (x * 0.5 + air * 0.6) * swell
+
+
+def stinger(variant):
+    """Seeing a body: a hard hit with a dissonant metallic cluster ringing out."""
+    seconds = 2.6
+    t = t_axis(seconds)
+    hit = lowpass(rng.standard_normal(len(t)), 250) * env_ad(len(t), 0.002, 0.12) * 2.5
+    hit += np.sin(2 * np.pi * 41 * t) * env_ad(len(t), 0.002, 0.5)
+    cluster = sum(np.sin(2 * np.pi * f * t + i) for i, f in enumerate([(690, 731, 774, 1093), (523, 554, 587, 831)][variant]))
+    cluster = np.tanh(1.5 * cluster) * env_ad(len(t), 0.01, 0.9) * 0.45
+    return room_tail(hit + cluster, seconds=1.5, tau=0.6, mix=0.45)
+
+
+def bodycam_crackle(variant):
+    """The recorder's audio track breaking up: sample-and-hold digital crackle with gaps."""
+    seconds = [0.18, 0.3, 0.42][variant]
+    n = int(SR * seconds)
+    hold = rng.integers(6, 40)
+    raw = np.repeat(rng.standard_normal(n // hold + 1), hold)[:n]
+    crushed = np.round(raw * 3) / 3                                  # bit-crushed
+    gate = (rng.random(n // 400 + 1) > 0.35).repeat(400)[:n]
+    return highpass(crushed * gate, 300)
+
+
+def bodycam_dropout():
+    """Frames dropped: a short codec blip and silence."""
+    seconds = 0.22
+    t = t_axis(seconds)
+    blip = np.sign(np.sin(2 * np.pi * 1180 * t)) * ((t < 0.035) | ((t > 0.09) & (t < 0.11)))
+    return band(blip.astype(float), 400, 5000) * 0.8
+
+
+def build_horror_audio():
+    """The Gaunt's voice, the building's ambience, stingers, recorder glitches (Nov 2026).
+    Own generator so they never change the sounds above."""
+    global rng
+    rng = np.random.default_rng(2613)
+    save_wav("SW_Gaunt_Breath_Loop", gaunt_breath_loop(), peak=0.7)
+    for v in range(3):
+        save_wav(f"SW_Gaunt_Click_0{v + 1}", gaunt_click(v), peak=0.75)
+    save_wav("SW_Gaunt_Growl_01", gaunt_growl(), peak=0.85)
+    save_wav("SW_Gaunt_Screech_01", gaunt_screech(), peak=0.85)
+    save_wav("SW_Gaunt_Scream_01", gaunt_scream(), peak=0.95)
+    for v in range(3):
+        save_wav(f"SW_Amb_MetalGroan_0{v + 1}", metal_groan(v), peak=0.8)
+        save_wav(f"SW_Amb_PipeKnock_0{v + 1}", pipe_knock(v), peak=0.8)
+    for v in range(2):
+        save_wav(f"SW_Amb_Creak_0{v + 1}", settling_creak(v), peak=0.7)
+        save_wav(f"SW_Amb_Thud_0{v + 1}", distant_thud(v), peak=0.9)
+        save_wav(f"SW_Amb_Debris_0{v + 1}", debris_trickle(v), peak=0.5)
+        save_wav(f"SW_Stinger_0{v + 1}", stinger(v), peak=0.9)
+    save_wav("SW_Amb_Drone_Loop", drone_loop(), peak=0.6)
+    for v in range(3):
+        save_wav(f"SW_Bodycam_Crackle_0{v + 1}", bodycam_crackle(v), peak=0.6)
+    save_wav("SW_Bodycam_Dropout_01", bodycam_dropout(), peak=0.5)
 
 
 # ============================================================ texture helpers

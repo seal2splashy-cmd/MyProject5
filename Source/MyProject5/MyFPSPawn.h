@@ -12,6 +12,7 @@ class UAnimationAsset;
 class UMeleeCombatComponent;
 class UOperatorArmsComponent;
 class UBodycamLensComponent;
+class UAHAmbienceComponent;
 class UBodycamTorchComponent;
 class UAudioComponent;
 class USoundBase;
@@ -56,6 +57,15 @@ public:
     /** "[F] ..." text for the HUD, empty when you're not looking at anything usable. */
     FString GetInteractPrompt() const;
     float GetPlanarSpeed() const { return static_cast<float>(PlanarVelocity.Size()); }
+
+    /** Something has hold of you (the Gaunt): no moving or looking, your view is dragged to its face. */
+    void Grab(AActor* By, float Seconds);
+    bool IsGrabbed() const { return bGrabbed; }
+
+    // ---- Settings (AAHPlayerController applies the saved ones)
+    void SetLookSensitivity(float Scale) { LookSensitivity = FMath::Clamp(Scale, 0.05f, 5.f); }
+    void SetInvertY(bool bInvert) { bInvertLookY = bInvert; }
+    void SetBaseFOV(float FOV);
     float GetWalkSpeed() const { return WalkSpeed; }
     /** True while a bandage is still working. */
     bool IsHealing() const { return PendingHeal > 0.f; }
@@ -151,6 +161,10 @@ private:
     // Bodycam look: lens post-process on the camera + chest torch (T)
     UPROPERTY(VisibleAnywhere, Category = "Bodycam")
     UBodycamLensComponent* BodycamLens;
+
+    /** The building's sounds reacting to your fear (AHAmbienceComponent.h). */
+    UPROPERTY(VisibleAnywhere, Category = "Audio")
+    UAHAmbienceComponent* Ambience;
 
     UPROPERTY(VisibleAnywhere, Category = "Bodycam")
     UBodycamTorchComponent* Torch;
@@ -368,6 +382,17 @@ private:
 
     /** Step up onto a ledge up to MaxStepHeight while moving by Remaining. False (and nothing moved) if it can't. */
     bool TryStepUp(const FVector& Remaining);
+
+    /** How hard a hit from an enemy shoves you (cm/s at full damage). */
+    UPROPERTY(EditAnywhere, Category = "Health", meta = (ClampMin = 0))
+    float HitKnockback = 420.f;
+
+    bool bGrabbed = false;
+    TWeakObjectPtr<AActor> GrabbedBy;
+    float GrabEndTime = 0.f;
+    float LookSensitivity = 1.f;
+    bool bInvertLookY = false;
+    void UpdateGrab(float DeltaTime);
 
     float CurrentSpeed = 300.f;
     float DesiredSpeed = 300.f;

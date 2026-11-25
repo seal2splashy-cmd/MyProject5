@@ -26,6 +26,7 @@
 #include "MeleeWeapon.h"
 #include "OperatorArmsComponent.h"
 #include "BodycamLensComponent.h"
+#include "AHAmbienceComponent.h"
 #include "BodycamTorchComponent.h"
 #include "RealismUtils.h"
 #include "AHInteractable.h"
@@ -75,6 +76,7 @@ AMyFPSPawn::AMyFPSPawn()
 
     // Bodycam lens look (post-process on the camera) and chest torch
     BodycamLens = CreateDefaultSubobject<UBodycamLensComponent>(TEXT("BodycamLens"));
+    Ambience = CreateDefaultSubobject<UAHAmbienceComponent>(TEXT("Ambience"));
     Torch = CreateDefaultSubobject<UBodycamTorchComponent>(TEXT("Torch"));
     Torch->SetupAttachment(CameraComponent);
 
@@ -552,6 +554,20 @@ float AMyFPSPawn::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent
     LandingShakeImpulse = FMath::Max(LandingShakeImpulse, 4.f);   // flinch
     AEnemy::ReportNoise(this, GetPawnViewLocation(), 600.f, this);   // a grunt of pain
 
+    // Hit by something (not a fall): shoved back, the bodycam takes the knock
+    if (DamageCauser && DamageCauser != this)
+    {
+        const float Strength = FMath::Clamp(DamageAmount / 25.f, 0.3f, 1.2f);
+        FVector Away = GetActorLocation() - DamageCauser->GetActorLocation();
+        Away.Z = 0.f;
+        PlanarVelocity += Away.GetSafeNormal() * HitKnockback * Strength;
+        LandingShakeImpulse = FMath::Max(LandingShakeImpulse, 7.f * Strength);
+        if (BodycamLens)
+        {
+            BodycamLens->ForceGlitch(0.55f * Strength, true);
+        }
+    }
+
     if (CurrentHealth <= 0.f)
     {
         OnDeath();
@@ -580,6 +596,58 @@ void AMyFPSPawn::Respawn()
 {
     // Reloading the level also fires EndPlay on smart enemies, which saves the Q-table
     UGameplayStatics::OpenLevel(this, FName(*UGameplayStatics::GetCurrentLevelName(this)));
+}
+
+void AMyFPSPawn::Grab(AActor* By, float Seconds)
+{
+    if (bIsDead || !By)
+    {
+        return;
+    }
+    bGrabbed = true;
+    GrabbedBy = By;
+    GrabEndTime = static_cast<float>(GetWorld()->GetTimeSeconds()) + Seconds;
+    bIsRunning = false;
+    bIsAiming = false;
+    PlanarVelocity = FVector::ZeroVector;
+    LandingShakeImpulse = FMath::Max(LandingShakeImpulse, 9.f);
+}
+
+void AMyFPSPawn::UpdateGrab(float DeltaTime)
+{
+    if (!bGrabbed)
+    {
+        return;
+    }
+    const AActor* By = GrabbedBy.Get();
+    if (bIsDead || !By || GetWorld()->GetTimeSeconds() >= GrabEndTime)
+    {
+        bGrabbed = false;
+        GrabbedBy.Reset();
+        return;
+    }
+    PlanarVelocity = FVector::ZeroVector;
+    // Your head is wrenched round to look at it
+    if (AController* C = GetController())
+    {
+        const FVector Face = By->IsA<APawn>() ? Cast<APawn>(By)->GetPawnViewLocation() : By->GetActorLocation();
+        const FRotator Want = (Face - GetPawnViewLocation()).Rotation();
+        C->SetControlRotation(FMath::RInterpTo(C->GetControlRotation(), Want, DeltaTime, 9.f));
+    }
+    if (BodycamLens)
+    {
+        BodycamLens->ReportInterference(1.f);
+        if (FMath::FRand() < DeltaTime * 6.f)
+        {
+            BodycamLens->ForceGlitch(FMath::FRandRange(0.6f, 1.f), true);
+        }
+    }
+    LandingShakeImpulse = FMath::Max(LandingShakeImpulse, 2.5f);
+}
+
+void AMyFPSPawn::SetBaseFOV(float FOV)
+{
+    BaseFOV = FMath::Clamp(FOV, 60.f, 130.f);
 }
 
 bool AMyFPSPawn::TryStepUp(const FVector& Remaining)
@@ -687,12 +755,13 @@ void AMyFPSPawn::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
 
-    if (bIsDead)
+    if (bIsDead || bGrabbed)
     {
         MovementInput = FVector::ZeroVector;
         CurrentTurnInput = 0.f;
         CurrentLookInput = 0.f;
     }
+    UpdateGrab(DeltaTime);
 
     CurrentSpeed = FMath::FInterpTo(CurrentSpeed, DesiredSpeed, DeltaTime, SpeedInterp);
 
@@ -1071,7 +1140,8 @@ void AMyFPSPawn::MoveRight(float Value)   { MovementInput.Y = bIsDead ? 0.f : FM
 
 void AMyFPSPawn::Turn(float Value)
 {
-    if (bIsDead) return;
+    if (bIsDead || bGrabbed) return;
+    Value *= LookSensitivity;
     // While guarding with melee, most of the mouse steers the blade instead of the camera
     if (Melee) Value = Melee->FilterLook(FVector2D(Value, 0.f)).X;
     CurrentTurnInput = Value;
@@ -1080,7 +1150,8 @@ void AMyFPSPawn::Turn(float Value)
 
 void AMyFPSPawn::LookUp(float Value)
 {
-    if (bIsDead) return;
+    if (bIsDead || bGrabbed) return;
+    Value *= LookSensitivity * (bInvertLookY ? -1.f : 1.f);
     // LookUp is mapped with Scale -1, so flip it for the blade (mouse up = blade up)
     if (Melee) Value = -Melee->FilterLook(FVector2D(0.f, -Value)).Y;
     CurrentLookInput = Value;

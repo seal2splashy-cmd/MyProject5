@@ -384,6 +384,14 @@ def main():
     decal("A07S_Blood_TunnelPool", mis["Pool"], (14570, -1050, 5), 150, 140, 75.0, sort=1)
     decal("A07S_Blood_TunnelWall", mis["Spatter"], (14480, -1322, 90), 70, 70, -90.0, wall=True)
 
+    # the ambience stings the first time you see each body (AHAmbienceComponent): tag them, old and new
+    for label, a in LEVEL.items():
+        if label.startswith("A07S_DeadOperator_") and "_Collision" not in label:
+            tags = list(a.get_editor_property("tags"))
+            if unreal.Name("AH_Stinger") not in tags:
+                tags.append(unreal.Name("AH_Stinger"))
+                a.set_editor_property("tags", tags)
+
     log("done: 3 operators, %d boot prints + the pools, crawl and spatter. The access card objective is on "
         "the operator in storage. Look around (torch on), then Ctrl+S." % n)
 
