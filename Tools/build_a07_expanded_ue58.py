@@ -150,8 +150,12 @@ def meshy(label, path, xy_bottom, max_size, yaw=0.0):
         return
     if label in EXISTING:
         return
-    bounds = mesh.get_bounding_box()
-    low, high = bounds.min, bounds.max
+    try:
+        bounds = mesh.get_bounding_box()
+        low, high = bounds.min, bounds.max
+    except Exception as exc:
+        warn("Cannot read Meshy bounds for %s: %s" % (path, exc))
+        return
     sx,sy,sz = high.x-low.x, high.y-low.y, high.z-low.z
     if min(sx,sy,sz) <= 0.00001:
         warn("Invalid bounds: " + path)
