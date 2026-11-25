@@ -48,7 +48,7 @@ Choose Tools > Execute Python Script:
 C:\\UE5Projects\\MyProject5\\Tools\\build_a07_expanded_ue58.py
 ```
 
-This script REFUSES to edit any map not named `AH_ForestResearch_A07_Expanded`, or one without the original `FR_RearWall`. On that duplicate only, it hides the rear wall, adds a 3.8m portal toward an airlock, then a new central hall with an observation branch, a large chamber and a utility passage. The mission's G-key interactions are placed **only if the C++ FacilityInteractionPoint and FacilityMissionDirector classes compile and are reflected in Unreal**. They use the existing G key; F remains torch and Q/E/Z/C remain the previously configured tilt/lean controls.
+This script REFUSES to edit any map not named `AH_ForestResearch_A07_Expanded`, or one without the original `FR_RearWall`. On that duplicate only, it hides the rear wall, adds a 3.8m portal toward an airlock, then a new central hall with an observation branch, a large chamber and a utility passage. The mission's G-key interactions are placed **only if the C++ FacilityInteractionPoint and FacilityMissionDirector classes compile and are reflected in Unreal**. Use them with **F** (the normal `[F] ...` prompt; G also works). T is the torch, Q/E/Z/C tilt/lean. Then run `Tools/setup_a07_playable_ue58.py` to add doors, pickups, the breach and checkpoints (see `Docs/A07_PLAYABLE.md`).
 
 **Don't press Ctrl+S until you have inspected the build.** The script does not automatically save. Check Outliner folder `AnomalyHunter/A07_Expanded`; each new actor name starts `A07_`.
 
@@ -75,7 +75,7 @@ The C++ mission controller implements access-card, generator, restricted securit
 - The containment vessel and mounting platform appear visually centred. Their Meshy scales are **best-effort bounding-box fits**, not physically verified dimensions.
 - The central chamber uses a separate simple invisible blocker; do not use complex-as-simple collision on the high-density Meshy FBXs.
 - Power-controlled lights start off; red emergency lights remain visible.
-- If the mission classes compile, G interactions progress logically without rebinding the other controls.
+- If the mission classes compile, F (or G) interactions progress in order; the objective shows top left on the HUD.
 - Check the utility exit approach; the prototype extraction marker is a mission objective rather than a transition to another game map.
 - Inspect the *original map*, TestArena and modified config files to confirm they are unchanged.
 

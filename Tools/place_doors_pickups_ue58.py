@@ -1,6 +1,7 @@
 """
 place_doors_pickups_ue58.py - run INSIDE the Unreal Editor (Tools > Execute Python Script...)
-with a forest facility map open: AH_ForestResearch_Small or AH_ForestResearch_MeshyPass01.
+with a forest facility map open: AH_ForestResearch_Small, AH_ForestResearch_MeshyPass01 or
+AH_ForestResearch_A07_Expanded (Tools/setup_a07_playable_ue58.py runs this one for you).
 
 Adds:
   - double doors (AAHDoor) in the six room doorways off the corridor and at the entrance
@@ -16,7 +17,7 @@ Docs/DOORS_PICKUPS.md
 import random
 import unreal
 
-MAPS = ("AH_ForestResearch_Small", "AH_ForestResearch_MeshyPass01")
+MAPS = ("AH_ForestResearch_Small", "AH_ForestResearch_MeshyPass01", "AH_ForestResearch_A07_Expanded")
 FOLDER = "AnomalyHunter/DoorsPickups"
 
 # label, (x, y, z floor), yaw, width, height. Yaw 90 = a door in a wall running along X.

@@ -9,6 +9,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Misc/DateTime.h"
 #include "Camera/PlayerCameraManager.h"
+#include "FacilityMissionDirector.h"
 
 void AMyHUD::DrawHUD()
 {
@@ -120,6 +121,94 @@ void AMyHUD::DrawHUD()
             DrawText(TEXT("Bandaging..."), FLinearColor(0.85f, 0.85f, 0.8f, 0.85f), 32.f, Canvas->SizeY - 150.f,
                 GEngine ? GEngine->GetSmallFont() : nullptr, 1.2f);
         }
+    }
+
+    DrawMission();
+}
+
+void AMyHUD::DrawMission()
+{
+    // Find the level's mission director (once a second until there is one: most maps have none)
+    if (!MissionDirector.IsValid())
+    {
+        const float Now = GetWorld()->GetTimeSeconds();
+        if (Now < NextDirectorSearch)
+        {
+            return;
+        }
+        NextDirectorSearch = Now + 1.f;
+        MissionDirector = AFacilityMissionDirector::Get(this);
+    }
+    const AFacilityMissionDirector* Director = MissionDirector.Get();
+    if (!Director || !Director->ShowsHUD())
+    {
+        return;
+    }
+
+    UFont* Small = GEngine ? GEngine->GetSmallFont() : nullptr;
+    UFont* Medium = GEngine ? GEngine->GetMediumFont() : nullptr;
+    const float T = GetWorld()->GetTimeSeconds();
+
+    // ---- the end screen
+    if (Director->IsMissionComplete())
+    {
+        DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.62f), 0.f, 0.f, Canvas->SizeX, Canvas->SizeY);
+        UFont* Large = GEngine ? GEngine->GetLargeFont() : nullptr;
+        const int32 Secs = FMath::FloorToInt(Director->GetMissionTime());
+        const FString Title = TEXT("EXTRACTION CONFIRMED");
+        const FString Stats = FString::Printf(TEXT("Mission time  %02d:%02d      Checkpoints used  %d"),
+            Secs / 60, Secs % 60, Director->GetDeaths());
+        float W = 0.f, H = 0.f;
+        GetTextSize(Title, W, H, Large, 2.f);
+        const float Y = Canvas->SizeY * 0.42f;
+        DrawText(Title, FLinearColor(0.4f, 1.f, 0.5f, 1.f), (Canvas->SizeX - W) * 0.5f, Y, Large, 2.f);
+        float SW = 0.f, SH = 0.f;
+        GetTextSize(Stats, SW, SH, Medium, 1.f);
+        DrawText(Stats, FLinearColor(0.9f, 0.9f, 0.88f, 0.95f), (Canvas->SizeX - SW) * 0.5f, Y + H + 18.f, Medium, 1.f);
+        const float RestartIn = Director->GetRestartIn();
+        if (RestartIn >= 0.f)
+        {
+            const FString Again = FString::Printf(TEXT("Restarting in %d"), FMath::CeilToInt(RestartIn));
+            float AW = 0.f, AH = 0.f;
+            GetTextSize(Again, AW, AH, Small, 1.2f);
+            DrawText(Again, FLinearColor(0.7f, 0.7f, 0.7f, 0.8f), (Canvas->SizeX - AW) * 0.5f, Y + H + SH + 40.f, Small, 1.2f);
+        }
+        return;
+    }
+
+    // ---- objective, top left, like a bodycam operator's tasking overlay
+    {
+        const float Age = Director->GetObjectiveAge();
+        const bool bFresh = Age < 4.f;
+        const float Flash = bFresh ? 0.5f + 0.5f * FMath::Cos(Age * 6.f) : 0.f;
+        const FString Head = Director->IsBreached() ? TEXT("OBJECTIVE  //  ALARM") : TEXT("OBJECTIVE");
+        const FString Body = Director->GetObjectiveText();
+        float HW = 0.f, HH = 0.f, BW = 0.f, BH = 0.f;
+        GetTextSize(Head, HW, HH, Small, 1.1f);
+        GetTextSize(Body, BW, BH, Small, 1.25f);
+        const float X = 28.f;
+        const float Y = 24.f;
+        DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.38f + 0.2f * Flash), X - 10.f, Y - 6.f, FMath::Max(HW, BW) + 20.f, HH + BH + 16.f);
+        DrawRect(Director->IsBreached() ? FLinearColor(0.9f, 0.15f, 0.1f, 0.9f) : FLinearColor(1.f, 0.62f, 0.12f, 0.9f),
+            X - 10.f, Y - 6.f, 3.f, HH + BH + 16.f);
+        const bool bAlarmBlink = Director->IsBreached() && FMath::Fmod(T, 0.9f) < 0.45f;
+        DrawText(Head, bAlarmBlink ? FLinearColor(1.f, 0.3f, 0.25f, 0.95f) : FLinearColor(1.f, 0.7f, 0.25f, 0.85f), X, Y, Small, 1.1f);
+        DrawText(Body, FLinearColor(0.95f, 0.95f, 0.92f, 0.8f + 0.2f * Flash), X, Y + HH + 4.f, Small, 1.25f);
+    }
+
+    // ---- mission messages, lower middle
+    FString MsgText;
+    FLinearColor MsgColour = FLinearColor::White;
+    float MsgAlpha = 0.f;
+    if (Director->GetCurrentMessage(MsgText, MsgColour, MsgAlpha) && MsgAlpha > 0.01f)
+    {
+        float W = 0.f, H = 0.f;
+        GetTextSize(MsgText, W, H, Medium, 1.f);
+        const float X = (Canvas->SizeX - W) * 0.5f;
+        const float Y = Canvas->SizeY * 0.30f;
+        DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.5f * MsgAlpha), X - 14.f, Y - 6.f, W + 28.f, H + 12.f);
+        MsgColour.A = MsgAlpha;
+        DrawText(MsgText, MsgColour, X, Y, Medium, 1.f);
     }
 }
 

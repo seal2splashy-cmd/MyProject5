@@ -490,6 +490,7 @@ def build_audio():
     save_wav("SW_Player_Hurt", player_hurt())
     save_wav("SW_Ambience_BodycamHiss_Loop", bodycam_hiss_loop(), peak=0.35)
     build_realism_audio()
+    build_facility_audio()
 
 
 def build_realism_audio():
@@ -522,6 +523,120 @@ def build_realism_audio():
     save_wav("SW_Pickup_Mag_01", pickup_mag(), peak=0.7)
     save_wav("SW_Pickup_Bandage_01", pickup_bandage(), peak=0.6)
     save_wav("SW_Pickup_Gear_01", pickup_gear(), peak=0.7)
+
+
+def terminal_accept():
+    """Facility terminal accepting a card / command: two rising beeps through a small speaker."""
+    seconds = 0.5
+    t = t_axis(seconds)
+    x = np.zeros_like(t)
+    for start, hz in ((0.0, 1320.0), (0.11, 1760.0)):
+        tt = np.clip(t - start, 0, None)
+        gate = (t >= start) & (t < start + 0.085)
+        tone = np.sign(np.sin(2 * np.pi * hz * tt)) * 0.35 + np.sin(2 * np.pi * hz * tt)
+        x += tone * gate * np.exp(-tt / 0.2)
+    x = band(x, 500, 5000, order=2)     # tinny speaker
+    return room_tail(x, seconds=0.4, tau=0.12, mix=0.2)
+
+
+def terminal_deny():
+    """Access denied: two low square-wave buzzes."""
+    seconds = 0.7
+    t = t_axis(seconds)
+    x = np.zeros_like(t)
+    for start in (0.0, 0.26):
+        tt = np.clip(t - start, 0, None)
+        gate = (t >= start) & (t < start + 0.18)
+        x += np.sign(np.sin(2 * np.pi * 220 * tt)) * gate
+    x = band(x, 180, 3500, order=2)
+    return room_tail(x, seconds=0.4, tau=0.12, mix=0.2)
+
+
+def power_on():
+    """Backup power: a heavy breaker clunk, relays clicking along the line, then mains hum
+    swelling up as the generator takes the load."""
+    seconds = 3.2
+    t = t_axis(seconds)
+    clunk = lowpass(rng.standard_normal(len(t)), 300) * env_ad(len(t), 0.002, 0.08) * 2.2
+    clunk += _modes(t, 95, [1.0, 2.6, 4.3], [0.15, 0.08, 0.05], [1, .5, .3])
+    relays = np.zeros_like(t)
+    for k in range(6):
+        start = 0.25 + 0.09 * k + rng.uniform(-0.02, 0.02)
+        c = band(rng.standard_normal(len(t)), 1500, 6000) * env_ad(len(t), 0.0005, 0.008)
+        relays += np.roll(c, int(SR * start)) * 0.5
+    rise = np.clip((t - 0.3) / 1.6, 0, 1) ** 1.5
+    hum = sum(np.sin(2 * np.pi * 50 * h * t) / h for h in (1, 2, 3, 4, 6)) * 0.25 * rise
+    hum += band(rng.standard_normal(len(t)), 80, 400, order=2) * 0.08 * rise
+    return room_tail(clunk + relays + hum, seconds=0.9, tau=0.3, mix=0.3)
+
+
+def blast_door_open():
+    """Heavy security door lifting: motor whine winding up, steel grinding in its tracks,
+    rumble, and a deep clank when it hits the top stop."""
+    seconds = 3.4
+    t = t_axis(seconds)
+    run = np.clip(t / 0.4, 0, 1) * np.clip((2.8 - t) / 0.2, 0, 1)
+    f = 140 + 90 * np.clip(t / 0.8, 0, 1)
+    whine = np.sin(2 * np.pi * np.cumsum(f) / SR) * 0.35 + np.sin(2 * np.pi * np.cumsum(f * 3.02) / SR) * 0.12
+    grind = band(rng.standard_normal(len(t)), 600, 2600) * (0.6 + 0.4 * np.sin(2 * np.pi * 7.3 * t)) * 0.35
+    rumble = lowpass(rng.standard_normal(len(t)), 120) * 1.2
+    body = (whine + grind + rumble) * run
+    stop = np.roll(lowpass(rng.standard_normal(len(t)), 260) * env_ad(len(t), 0.002, 0.1) * 3.0
+                   + _modes(t, 120, [1.0, 2.4, 3.9], [0.3, 0.2, 0.12], [1, .6, .4]) * 1.2, int(SR * 2.8))
+    return room_tail(body + stop, seconds=1.0, tau=0.35, mix=0.35)
+
+
+def decon_hiss():
+    """Decontamination spray: a valve thump then pressurised mist hissing, with a slow flutter."""
+    seconds = 5.0
+    t = t_axis(seconds)
+    valve = lowpass(rng.standard_normal(len(t)), 400) * env_ad(len(t), 0.002, 0.05) * 1.5
+    env = np.clip((t - 0.05) / 0.25, 0, 1) * np.clip((4.8 - t) / 0.6, 0, 1)
+    hiss = highpass(rng.standard_normal(len(t)), 2500) * env * (0.8 + 0.2 * np.sin(2 * np.pi * 3.1 * t))
+    spray = band(rng.standard_normal(len(t)), 900, 3000) * env * 0.3
+    return room_tail(valve + hiss + spray, seconds=0.6, tau=0.2, mix=0.25)
+
+
+def alarm_loop(cycles=4, period=1.1):
+    """Containment breach klaxon: a harsh two-tone whoop (rises then cuts), looping seamlessly."""
+    seconds = cycles * period
+    t = t_axis(seconds)
+    phase = (t % period) / period
+    on = phase < 0.78
+    f = 480 + 420 * np.clip(phase / 0.78, 0, 1)
+    ph = 2 * np.pi * np.cumsum(f) / SR
+    tone = (np.sign(np.sin(ph)) * 0.5 + np.sin(ph) + 0.4 * np.sin(2 * ph)) * on
+    tone *= np.clip(phase / 0.02, 0, 1) * np.clip((0.78 - phase) / 0.03, 0, 1)
+    x = band(tone, 300, 4500, order=2)
+    xf = int(SR * 0.02)
+    x[:xf] *= np.linspace(0, 1, xf)
+    x[-xf:] *= np.linspace(1, 0, xf)
+    return x
+
+
+def light_pop():
+    """Overloaded tubes giving up: an electrical crackle and a glassy pop."""
+    seconds = 1.0
+    t = t_axis(seconds)
+    crackle = band(rng.standard_normal(len(t)), 2000, 9000) * (rng.random(len(t)) < 0.02) * 3.0
+    crackle *= np.clip((0.45 - t) / 0.45, 0, 1)
+    pop = np.roll(highpass(rng.standard_normal(len(t)), 1500) * env_ad(len(t), 0.0005, 0.02) * 1.6
+                  + _modes(t, 2600, [1.0, 1.7, 2.9], [0.05, 0.04, 0.03], [1, .6, .4]) * 0.5, int(SR * 0.35))
+    buzz = np.sin(2 * np.pi * 100 * t) * np.clip((0.35 - t) / 0.35, 0, 1) * 0.3
+    return room_tail(crackle + pop + buzz, seconds=0.6, tau=0.2, mix=0.3)
+
+
+def build_facility_audio():
+    """A-07 mission sounds (Nov 2026). Own generator so they never change the sounds above."""
+    global rng
+    rng = np.random.default_rng(2612)
+    save_wav("SW_Terminal_Accept_01", terminal_accept(), peak=0.6)
+    save_wav("SW_Terminal_Deny_01", terminal_deny(), peak=0.55)
+    save_wav("SW_Power_On_01", power_on(), peak=0.85)
+    save_wav("SW_BlastDoor_Open_01", blast_door_open(), peak=0.85)
+    save_wav("SW_Decon_Hiss_01", decon_hiss(), peak=0.6)
+    save_wav("SW_Alarm_Loop", alarm_loop(), peak=0.7)
+    save_wav("SW_Light_Pop_01", light_pop(), peak=0.75)
 
 
 # ============================================================ texture helpers

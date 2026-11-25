@@ -4,6 +4,8 @@
 #include "GameFramework/HUD.h"
 #include "MyHUD.generated.h"
 
+class AFacilityMissionDirector;
+
 /**
  * Minimal bodycam HUD:
  *  - the body camera's own burn-in, top right: blinking REC, date/time, unit number
@@ -11,6 +13,8 @@
  *    opening up with the gun's current spread and fading out when you aim down the sights
  *  - health bar (green > 60%, amber 30-60%, red < 30%) and stamina bar, bottom left
  *  - ammo readout (rounds ready / in spare mags), death screen
+ *  - A-07 mission (AFacilityMissionDirector in the level): objective top left, mission messages,
+ *    the "extraction confirmed" screen
  */
 UCLASS()
 class MYPROJECT5_API AMyHUD : public AHUD
@@ -61,4 +65,8 @@ private:
     void DrawTorchBattery(float Battery01, bool bTorchOn, bool bLow);
     void DrawDeathScreen(float TimeSinceDeath);
     void DrawBodycamOverlay();
+    void DrawMission();
+
+    TWeakObjectPtr<AFacilityMissionDirector> MissionDirector;
+    float NextDirectorSearch = 0.f;
 };

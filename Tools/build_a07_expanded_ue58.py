@@ -376,7 +376,7 @@ def main():
     if director_cls:
         director = spawn(director_cls,"A07_MissionDirector",(6600,0,150))
         if director:
-            setprop(director,"b_spawn_gaunt_after_containment",False)
+            setprop(director,"spawn_gaunt_after_containment",True)  # Tools/setup_a07_playable_ue58.py also sets the release point
     else:
         warn("FacilityMissionDirector unavailable. Build/reopen project for G-key mission.")
 

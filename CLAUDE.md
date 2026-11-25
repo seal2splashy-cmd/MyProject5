@@ -26,12 +26,18 @@
 - AGauntAnomaly - ASmartEnemy with the Gaunt's body: rigged SK_AH_Gaunt + clips if imported, else the static
   stand-in with procedural motion; reports bodycam interference when near (Docs/GAUNT_ANOMALY.md)
 - AMyHUD - bodycam REC/timestamp overlay, spread-aware crosshair (fades on ADS), health/stamina bars, ammo + mags,
-  death screen
+  death screen, mission objective (top left) + messages + extraction screen when a mission director is in the level
 - AAHInteractable (AHInteractable.h) - base for F-to-use things; the pawn traces from the camera, HUD shows "[F] ..."
 - AAHDoor - single/double hinged door from engine shapes; opens away from you, sprint = slam, enemies open it,
   noises, locked doors block the NavMesh (Docs/DOORS_PICKUPS.md)
 - AAHPickup - magazine (pouch, max 6) / bandage (heal over time) / torch battery; Tools/place_doors_pickups_ue58.py
   places doors + pickups in the forest maps
+- AFacilityMissionDirector - the A-07 mission: 7 ordered steps (card, power, security door, decon, observation log,
+  containment -> breach, extraction), HUD text, light roles by tag (AH_PoweredLight/EmergencyLight/FlickerLight),
+  lifting security slab, airlock door lock, breach alarm + Gaunt release, checkpoints, restart (Docs/A07_PLAYABLE.md)
+- AFacilityInteractionPoint - an AAHInteractable mission device built from engine shapes (lockbox, breaker,
+  card reader, decon panel, terminal, beacon) with a red/amber-pulse/green status light; F or G
+- UAHMissionProgress - GameInstance subsystem holding the mission checkpoint across the death reload
 - AHRealism (RealismUtils) - surface type from a hit (names), per-surface penetration/footstep/impact data,
   generated sound lookup, realistic attenuation (distance low-pass + wall occlusion)
 - AMeleeWeapon - physics melee: spring-damper hand, mouse-steered guard, velocity-based damage
@@ -59,11 +65,13 @@
   AGun and AMeleePipe use them automatically when imported (AMeleeWeapon::ModelMesh).
 - Meshy arms: Assets/Meshy/arms/ (FBX + PNGs) -> Tools/build_meshy_arms_blender.py fits them onto the operator
   rig -> Assets/OperatorArmsMeshy/SK_AH_OperatorArms_Meshy.fbx + T_AH_MeshyArms_*; Tools/import_meshy_arms_ue58.py.
+- A-07 map: duplicate AH_ForestResearch_MeshyPass01 as AH_ForestResearch_A07_Expanded, run
+  Tools/build_a07_expanded_ue58.py then Tools/setup_a07_playable_ue58.py (doors, pickups, tags, Gaunt, sounds, NavMesh).
 
 ## Controls
 WASD move, Shift sprint, Ctrl crouch (slide while sprinting), Space jump, Q/E head tilt, Z/C lean,
 1 gun, 2 melee (press 2 again to cycle pipe/crowbar/machete/axe). Gun: LMB fire, RMB aim, R reload. Melee: hold RMB + move mouse to steer, LMB thrust.
-F use (doors, pickups), T torch.
+F use (doors, pickups, mission devices; G also works on mission devices), T torch.
 
 ## Still to do
 - One/two-hand grip modes for melee
